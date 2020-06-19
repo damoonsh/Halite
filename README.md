@@ -1,0 +1,1 @@
+## Halite Competition on [Kaggle](https://www.kaggle.com/c/halite/overview)
