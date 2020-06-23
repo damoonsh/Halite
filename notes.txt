@@ -12,3 +12,11 @@ one another.
 # Destroying enemy's shipyards:
 
 # Destroying enemy ships with lower halite than ours:
+
+- Weighted grid algorithm:
+    - When there is a ship with less cargo: attack it
+    - When there is a ship with 
+
+
+# Implement: 
+	- A class(es) that calculates the tendency to either attack or defend.
