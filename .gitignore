@@ -1,1 +1,12 @@
 .ipynb_checkpoints/
+Player.py
+Cell.py
+Board.py
+Ship.py
+Shipyard.py
+submission_base.py
+intro.ipynb
+halite-sdk-overview.ipynb
+submission.py
+halite-template-bot.ipynb
+kaggle_environments/
