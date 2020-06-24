@@ -3,7 +3,10 @@ from kaggle_environments.envs.halite.helpers import *
     
 class LocateObject:
     """ 
-       params:
+        This object is used to locate all the ships/shipyards
+        relative to its given object 
+        
+        params:
             board: board to play on
             obj: either a shipyard/ship 
     """
@@ -83,60 +86,88 @@ class Decision_Ship:
         # All moves ship can take
         self.moves = {"N": ShipAction.NORTH, 'S': ShipAction.SOUTH, 'W': ShipAction.WEST , 
                       'E' : ShipAction.EAST, 'convert': ShipAction.CONVERT,'mine': None}
+        
         # 5x5 grid around the ship's cell
         self.grid = grid_5(self.ship.cell)
+        # Stats of the grid
+        self.grid_stat = get_grid_stat(self.grid)
 
+        # Objects in the grid
+        self.objects = LocateObject.surroundings()
+
+        # Hyperparameters controlling ship's behavior
         self.hyperparameters = ShipTendency(board, ship).tend()
+        
+        # The default next move is None
+        self.next_move = None
         
         
     def determine(self):
         """ Return the next action """
-        # Implement: Make on all the decisions solely on weights
-        ##################################################################################
-        # This parts should be implemented differently
-        # If they were no yards, then convert a ship
-        if len(self.player.shipyards) == 0:
-            # Implement: find the best ship in the board that could turn in to a yard
-            return self.moves['convert'] 
-        
-        # Given that steps is more than a certain amount convert ship with halite more than 500
-        # Sometimes the trial does not last 393 and I should look for the number of different 
-        # agent's halite and ships and yards
-        if (self.step > 395 or self.near_end()) and self.ship.halite >= 500:
-            return self.moves['convert'] 
-        
-        # If a ship has more than 2500 halite then make it a yard
-        if self.ship.halite > 2500:
-            return self.moves['convert']  
-        ##################################################################################
-        
-        # Implement: more robust way of comparing all the possible moves
-        
         # Weight different moves
         weights = self.weight_moves()
-        
-        # Check to see if not all of the moves were deleted from dictionary
+
+        mining = self.weight_mining()
+        converting = self.weight_convert()
+
+        available_moves = self.moves.keys()
+
+        # If not all the moves were eliminated
         if len(weights) > 0:
             max_move = max(weights, key=weights.get)
+            
+            if weights[max_move] < mining and mining > converting and 'mine' in available_moves:
+                self.next_move = self.moves['mine']
+            elif weights[max_move] < converting and mining < converting and 'convert' in available_moves:
+                self.next_move = self.moves['convert']
+            else:
+                self.next_move = self.moves[max_move]
+            
         else:
-            # If all were deleted  then mine
-            return self.moves['mine']
+            # If all the moves were eliminated then just choose
+            if mining < converting and 'convert' in available_moves:
+                self.next_move = self.moves['convert']  
         
-        ## Improve this part
-        # If the weights were not high enough
-        if 'mine' in self.moves.keys() and (self.ship.cell.halite) > weights[max_move]:
-            return self.moves['mine']
-        
-        return self.moves[max_move]
-        
-    
+        return self.next_move
+
+
+    def nearest_shipyard(self):
+        """ Returns the id of the nearest shipyard to the ship. """
+        return min(self.objects['my_shipyards'], key=self.objects['my_shipyards'].get)
+
+
+    def nearest_ship(self):
+        """ Returns the id of the nearest ship to the ship. """
+        return min(self.objects['my_ships'], key=self.objects['my_ships'].get)
+
+
     def weight_mining(self):
-        pass
+        """ Weights mining move for the ship. """
+        # Direct correlation with the amount of halite in current_cell - exponential
+        w = self.ship.cell.halite ** (1.5) 
+
+        return w * self.hyperparameters['mine']
 
 
-    def weight_convert(self):
+    def weight_convert(self, threshold=2000):
+        """ Weights converting for the ship. """
+        # Some things to take into account
+        # 1. If they are no shipyards left
+        no_yards_left = len(self.player.shipyards) == 0
+        # 2. If it is the end of the game and we have more than 500 halite in our cargo
+        end_of_game_conversion = (self.step > 395 or self.near_end()) and self.ship.halite >= 500
+        # 3. There will be a threshold for the amount of cargo any ship could have
+        threshhold_reach = self.ship.halite > threshold
+
+        if no_yards_left or end_of_game_conversion or threshhold_reach: return 1000
+
+
+    # Implement:
+    def most_suitable_to_convert(self):
+        """ This function checks the board to see if th is ship is 
+        the best option for conversion given that they are no other ships. """
         pass
-    
+
     
     def weight_moves(self):
         """
@@ -203,7 +234,7 @@ class Decision_Ship:
         cell_yard = cell.shipyard
         
         # Mine
-        w += (cell.halite - self.ship_halite) + 2
+        w += ((cell.halite - self.ship_halite) + 3) * self.hyperparameters['mine']
         
         if cell_ship != None:
             if cell_ship.id in self.player.ship_ids:
