@@ -1,22 +1,12 @@
-This is a pretty complex game and they are obviousley going to be various possible functionalities
-implemented to be used. Yet it is importance that the functions are scale able and interactive with
-one another.
-
-# Keeping track of cells with a lot of halite:
-    By keeping track of cells with high amount of halite one could decide more analyticly.
-    Also, it is important to track where the enemy ships are, and if they were anywhere 
-    near to our shipyards, our ships should destroy them. On this note it would make sense to have 
-    one or two ships guarding the shipyards, they would simply attack anything in the range of the 
-    shipyard.
-    
-# Destroying enemy's shipyards:
-
-# Destroying enemy ships with lower halite than ours:
-
-- Weighted grid algorithm:
-    - When there is a ship with less cargo: attack it
-    - When there is a ship with 
+The logic is to build a flexible bot that will be able to scale given different circumstances. In order to do that
+we need consider other 
 
 
 # Implement: 
 	- A class(es) that calculates the tendency to either attack or defend.
+    - A set of testing environments to see how the algorithm would react:
+        run a series of command on all of the ships and shipayrd to make them
+        orient in a certain way.
+	- A class that predict the most possible move by the near by ship:
+		- Check the ship's N,S,W,E and choose the one the most number of halites
+		and if the cargo was more than mine then go and vice-versa

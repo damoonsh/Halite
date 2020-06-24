@@ -1,4 +1,3 @@
-
 from kaggle_environments.envs.halite.helpers import *
 
 class Decesion_Ship:
@@ -161,6 +160,7 @@ class Decesion_Ship:
         # If count was more than 2 return True
         return count >= 2
 
+    
 
 class Decesion_shipyard:
     """ Decides a move for the shipyard. """
@@ -178,6 +178,7 @@ class Decesion_shipyard:
         pass
 
 
+    
 class LocateObject:
     """ 
         Gets a board and a object (ship/shipyard) and returns a dictionary containing
@@ -187,32 +188,64 @@ class LocateObject:
         self.board = board
         self.player = obj.player
         self.obj = obj
+        self.pos = obj.position
         # Get the current_player's ship and shipyard ids
         self.ship_ids = obj.player.ship_ids
         self.shipyard_ids = obj.player.shipyard_ids
     
-    def get_enemy_ships(self):
-        """ Returns enemy ships in a list"""
-        ships = []
-        for ship in board.ships:
-            if not (ship.id in self.ship_ids)
-                ships.append(ship)
+    def souroundings():
+        """ Returns a dict containing the list of objects nearby the given object. """
+        my_ships, opp_ships = self.locate_ships()
+        my_yards, opp_ships = self.locate_yards()
+        
+        return {
+            "my_ships": my_ships, "opp_ships": opp_ships, "my_yards": my_yards, "opp_ships": opp_ships
+        }
+    
+    
+    def locate_yards(self):
+        # Get the enemy and player ships
+        my_yards_dict, opp_yards_dict = {}, {}
+        
+        for shipyard in self.board.shipyards:
+            if shipyard.id != self.obj.id  and shipyard in self.player.shipyards:
+                my_yards_dict[shipyard.id] = count_moves(self.pos, shipyard.position)
+            elif shipyard.id != self.obj.id:
+                opp_yards_dict[shipyard.id] = count_moves(self.pos, shipyard.position)
             
+        return my_yards_dict, opp_yards_dict
+    
     
     def locate_ships(self):
         # Get the enemy and player ships
-        my_ships = self.player.ships
-        opp_ships = get_enemy_ships()
+        my_ships_dict, opp_ships_dict = {}, {}
+        
+        for ship in self.board.ships:
+            if ship.id != self.obj.id and ship in self.player.ships:
+                my_ships_dict[ship.id] = count_moves(self.pos, ship.position)
+            elif ship.id != self.obj.id:
+                opp_ships_dict[ship.id] = count_moves(self.pos, ship.position)
+            
+        return my_ships_dict, opp_ships_dict
+    
     
 class ShipTendency:
     """ 
         Weights different options for either to be offensive or deffensive for
         a given ship at any position on the board
     """
+    # 1. Look for yards where they might be in danger:
+    #    Check the souroundins of the yards to make sure they are not threatened
+    # Note: generally speaking go over all of the 
     def __init__(self, board, ship):
         # Get the values
         self.board = board
         self.ship = ship
+        self.cargo = ship.halite
+        # Constructiong a grid
+        self.grid = grid_5(cell)
+        # The distance of all objects in the board relative to our ship
+        self.objects = LocateObject(board, ship).souroundings()
     
 
 class ShipyardTendency:
@@ -225,6 +258,7 @@ class ShipyardTendency:
         self.board = board
         self.yard = shipyard
 
+        
 ###############################
 # Helper Functions for objects#
 ###############################
@@ -266,27 +300,29 @@ def sigmoid(val):
 
 
 
-def count_moves(point1, point2, size=20):
+def count_moves(point1, point2, size=21):
     """ 
         Returns the minimum number of between moves 
         to go from point1 to point2. 
+        Based on the negativity of diff_x and diff_y,, we can decide the direction
+        {[id]: {'num': int, 'diff_x': int, 'diff_y': int}, ...}
     """
     # Break the points into coordinates
-    x1, y1 = point1
-    x2, y2 = point2
-
-
-def measure_distance(point1, point2, size=20):
-    """ 
-        Returns the distance between two points. 
-    """
-    # Break the points into coordinates
-    x1, y1 = point1
-    x2, y2 = point2
-
-    dist1 = ((x2 - x1) ** 2 + (y1 - y2) ** 2) ** (0.5)
-    dist1 = ((x2 - x1) ** 2 + (y1 - y2) ** 2) ** (0.5)
-    dist1 = ((x2 - x1) ** 2 + (y1 - y2) ** 2) ** (0.5)
+    x1, y1 = point1.x, point1.y
+    x2, y2 = point2.x, point2.y
+    
+    # For both x and y they are two type of paths to take
+    diff_x_1 = abs(x2 - x1) 
+    diff_x_2 = abs(size + x2 - x1)
+    diff_y_1 = abs(y2 - y1)
+    diff_y_2 = abs(size + y2 - y1)
+    
+    opt1 = diff_x_1 + diff_y_1
+    opt2 = diff_x_1 + diff_x_2
+    opt3 = diff_x_2 + diff_y_1
+    opt4 = diff_x_2 + diff_x_2
+    
+    return min(opt1, opt2, opt3, opt4)
 
 
 # Global values
