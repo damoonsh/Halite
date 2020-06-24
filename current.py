@@ -3,10 +3,14 @@ from kaggle_environments.envs.halite.helpers import *
 class Decesion_Ship:
     """ 
         Decides ship's next move:
+
         params: 
             board = the board that we will base our decisions on
             ship = the ship we are deciding for
             step = the steps into the situmalation
+        
+        returns:
+            determine: returns the next-action that should be taken
     """
     # Implement a function that measures the nearest shipayrds
     def __init__(self, board, ship, step):
@@ -74,21 +78,20 @@ class Decesion_Ship:
         weights = {}
         
         # Add the all other point to the main four with their corresponding weights
-        for Dir, cell in self.grid[1].items():
+        for Dir, cell in self.grid.items():
             
-            if Dir in self.moves.keys(): 
+            if Dir in self.moves.keys() and len(Dir) == 1: 
                 # Instantiate the weight for the Direction
                 weights[Dir] = self.weight_cell(cell)
                 
                 # Each cell will be multiplied by a weight given that it takes 
                 # different number of steps to get to that point
-                move_weight = {2: 0.8, 3: 0.7, 4: 0.5}
+                move_weight = {2: 0.8, 3: 0.7, 4: 0.65}
                 
                 # Go through all other ones
-                for index in  range(2, 5):
-                    for sub_Dir, sub_cell in self.grid[index].items():
-                        if Dir in sub_Dir:
-                            weights[Dir] += self.weight_cell(sub_cell) * move_weight[index]
+                for sub_Dir, sub_cell in self.grid.items():
+                    if Dir in sub_Dir and Dir != sub_Dir and len(sub_Dir) == 1:
+                        weights[Dir] += self.weight_cell(sub_cell) * move_weight[len(sub_cell)]
                             
         return weights
                     
@@ -130,22 +133,26 @@ class Decesion_Ship:
         cell_ship = cell.ship
         cell_yard = cell.shipyard
         
+        # Mine
         w += (cell.halite - self.ship_halite) + 2
         
         if cell_ship != None:
             if cell_ship.id in self.player.ship_ids:
+                # Avoid clash
                 w += cell_ship.halite * -10
             else:
                 myCargo = self.ship.halite
                 oppCargo = cell_ship.halite
-                
+                # Deffensive
                 w += (oppCargo - myCargo) * 8
                 
         if cell_yard != None:
             if cell_yard.id in self.player.shipyard_ids:
+                # Defensive
                 w += ( self.ship.halite + 10) * 7
             else:
                 oppYards = len(cell_yard.player.shipyards)
+                # offensive
                 w += 1 / (oppYards + 1) * 10
         
         return round(w, 3)
@@ -170,7 +177,7 @@ class Decesion_shipyard:
         self.board = board
         self.step = step
         # Possible moves
-        self.moves = {'convert': ShipyardAction.SPAWN,'stay': None}
+        self.moves = {'convert': ShipyardAction.SPAWN, 'stay': None}
         self.grid = grid_5(shipyard.cell)
         
     def determine():
@@ -231,12 +238,13 @@ class LocateObject:
     
 class ShipTendency:
     """ 
-        Weights different options for either to be offensive or deffensive for
-        a given ship at any position on the board
+        Given the ship's situation and properties, weights different set of moves
+        and returns a set of relatively scaled weights
+
+        params:
+            board: Board that events are occuring
+            ship: Our ship
     """
-    # 1. Look for yards where they might be in danger:
-    #    Check the souroundins of the yards to make sure they are not threatened
-    # Note: generally speaking go over all of the 
     def __init__(self, board, ship):
         # Get the values
         self.board = board
@@ -244,8 +252,47 @@ class ShipTendency:
         self.cargo = ship.halite
         # Constructiong a grid
         self.grid = grid_5(cell)
+        # Get the stat of the grid that ship is in
+        self.grid_stat = get_grid_stat(grid)
+        
         # The distance of all objects in the board relative to our ship
         self.objects = LocateObject(board, ship).souroundings()
+        # Initiate the values that are going to be returned 
+        self.deffensive = 0
+        self.offensive = 0
+        self.mine = 0
+
+
+    def analyze_yard_stat(self):
+        """ Focous on the yards values of the stat. """
+        yards = self.grid_stat['Shipyards']
+
+
+        # Implement
+
+
+
+    def tend(self):
+        # Do sth
+
+
+        # Scale the weights
+        self.scale()
+
+        # Note: the returned values are considered to be hyperparameters of the
+        # actual weightings and are positive values between 0 and one
+        return {
+            'deffensive': self.deffensive,
+            'offensive': self.offensive,
+            'mine': self.mine
+        }
+
+
+    def scale(self):
+        Sum = self.deffensive + self.offensive + self.mine
+        self.deffensive /= Sum
+        self.offensive /= Sum
+        self.mine /= Sum
     
 
 class ShipyardTendency:
@@ -259,9 +306,27 @@ class ShipyardTendency:
         self.yard = shipyard
 
         
-###############################
-# Helper Functions for objects#
-###############################
+####################
+# Helper Functions #
+####################
+
+
+def get_stat(grid):
+    """ Returns the cells of the grid with shipyards, yards and cell with non-objects"""
+    stat = {'Ships': [], 'Shipyards': [], 'NoObject': []} # NoObject will contain cells
+
+    for Dir, cell in grid.items():
+        
+        if sgrid[Dir].ship != None:
+            stat['Ships'].append(cell)
+        elif grid[Dir].shipyard != None:
+            stat['Shipyards'].append(cell)
+        else:
+            stat['NoObject'].append(cell)
+
+    return stat
+
+
 def grid_5(cell):
     """
         Returns a dictionary based on the cells in 
@@ -277,18 +342,14 @@ def grid_5(cell):
     ss = south.south
     ww = west.west
     ee = east.east
-        
+    
+    # The length of the key corresponds to the number of moves needed to get to the cell
     return {
-        1: {'N': north, 'S': south, 'W': west, 'E': east}, 
-        2: {
-            'NW': north.west, 'NE': north.east, 'SW': south.west, 'SE': south.east,
-            'WW': ww, 'EE': ee, 'NN': nn, 'SS': ss
-            },
-        3: {
-             'NEN': nn.east, 'NWN': nn.west, 'SES': ss.east, 'SWS': ss.west, 
-             'SEE': ee.south, 'NEE': ee.north, 'SWW': ww.south, 'NWW': ww.north
-        },
-        4: {'SEES': ee.south.south , 'NEEN': ee.north.north, 'NWWN': ww.north.north, 'SWWS': ww.south.south}
+        'N': north, 'S': south, 'W': west, 'E': east, 'NW': north.west, 'NE': north.east, 
+        'SW': south.west, 'SE': south.east, 'WW': ww, 'EE': ee, 'NN': nn, 'SS': ss 
+        'NEN': nn.east, 'NWN': nn.west, 'SES': ss.east, 'SWS': ss.west,  'SEE': ee.south, 
+        'NEE': ee.north, 'SWW': ww.south, 'NWW': ww.north, 'SEES': ee.south.south , 
+        'NEEN': ee.north.north, 'NWWN': ww.north.north, 'SWWS': ww.south.south
     }        
 
 
