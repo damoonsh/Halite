@@ -22,12 +22,13 @@ class Decesion_Ship:
         self.moves = {"N": ShipAction.NORTH, 'S': ShipAction.SOUTH, 'W': ShipAction.WEST , 
                       'E' : ShipAction.EAST, 'convert': ShipAction.CONVERT,'mine': None}
         # 5x5 grid around the ship's cell
-        self.grid = self.grid_5()
+        self.grid = grid_5(self.ship.cell)
         
         
     def determine(self):
         """ Return the next action """
-        
+        ##################################################################################
+        # This parts should be implemented differently
         # If they were no yards, then convert a ship
         if len(self.player.shipyards) == 0:
             # Implement: find the best ship in the board that could trun in to a yard
@@ -36,12 +37,15 @@ class Decesion_Ship:
         # Given that steps is more than a certain amount convert ship with halite more than 500
         # Sometimes the trial does not last 393 and I should look for the number of different 
         # agent's halite and ships and yards
-        if self.step > 393 and self.ship.halite >= 500:
+        if (self.step > 393 or self.near_end()) and self.ship.halite >= 500:
             return self.moves['convert'] 
         
         # If a ship has more than 2500 halite then make it a yard
         if self.ship.halite > 2500:
             return self.moves['convert']  
+        ##################################################################################
+        
+        # Implement: more robust way of comparing all the possible moves
         
         # Weight different moves
         weights = self.weight_moves()
@@ -66,24 +70,26 @@ class Decesion_Ship:
             This functions weights different points based on their properties and
             returns a dictionary of weights to choose from.
         """
-        # ADD the 1 2 3 4 moves
         # First stage: eliminations
         self.first_stage()
         weights = {}
         
-        # Add the weight of all other point to the main four
-        for Dir, cell in self.grid["1"].items():
+        # Add the all other point to the main four with their corresponding weights
+        for Dir, cell in self.grid[1].items():
             
             if Dir in self.moves.keys(): 
                 # Instantiate the weight for the Direction
-                own_weight = self.weight_cell(cell)
-                weights[Dir] = own_weight
-
+                weights[Dir] = self.weight_cell(cell)
+                
+                # Each cell will be multiplied by a weight given that it takes 
+                # different number of steps to get to that point
+                move_weight = {2: 0.8, 3: 0.7, 4: 0.5}
+                
                 # Go through all other ones
                 for index in  range(2, 5):
-                    for sub_Dir, sub_cell in self.grid[str(index)].items():
+                    for sub_Dir, sub_cell in self.grid[index].items():
                         if Dir in sub_Dir:
-                            weights[Dir] += self.weight_cell(sub_cell)
+                            weights[Dir] += self.weight_cell(sub_cell) * move_weight[index]
                             
         return weights
                     
@@ -97,7 +103,7 @@ class Decesion_Ship:
         """
         
         # If there was a ship/shipyard in E,N,W,or E
-        for Dir, cell in self.grid["1"].items():
+        for Dir, cell in self.grid[1].items():
             cell_ship = cell.ship
             cell_yard = cell.shipyard
             
@@ -116,12 +122,11 @@ class Decesion_Ship:
                         del self.moves[Dir]
                         # To avoid errors first check to see if the value is there or not
                         if 'mine' in self.moves.keys():
-                            del self.moves['mine']
-                        
-                    
+                            del self.moves['mine']                                
     
     def weight_cell(self, cell):
         """ Weights a cell only based on its properties and relative halite. """
+        # Change: the random weights in this block should be changed with tendencies
         w = 0
         cell_ship = cell.ship
         cell_yard = cell.shipyard
@@ -145,58 +150,144 @@ class Decesion_Ship:
                 w += 1 / (oppYards + 1) * 10
         
         return round(w, 3)
-                    
-        
-    
-    def grid_5(self):
-        """
-            retuns a 5x5 dictionary as a dictionary
-            1 means cells where you can reach with one move, etc.
-        """
-        # Main ones
-        north = self.ship.cell.north
-        south = self.ship.cell.south
-        west = self.ship.cell.west
-        east = self.ship.cell.east
-        # Secondary ones
-        nn = north.north
-        ss = south.south
-        ww = west.west
-        ee = east.east
-        
-        return {
-            '1': {'N': north, 'S': south, 'W': west, 'E': east}, 
-            '2': {
-                    'NW': north.west, 'NE': north.east, 'SW': south.west, 'SE': south.east,
-                    'WW': ww, 'EE': ee, 'NN': nn, 'SS': ss
-                },
-            '3': {
-                 'NEN': nn.east, 'NWN': nn.west, 'SES': ss.east, 'SWS': ss.west, 
-                 'SEE': ee.south, 'NEE': ee.north, 'SWW': ww.south, 'NWW': ww.north
-             },
-            '4': {'SEES': ee.south.south , 'NEEN': ee.north.north, 'NWWN': ww.north.north, 'SWWS': ww.south.south}
-        }
     
     
     def near_end(self):
-        """ returns if the game is almost over. """
-        # if opponents have 0 halite and no ships, get in more detail
-        pass
+        """ Returns True if the game is almost over. """
+        count = 0
+        # If the halite was less than 500 and it had no ships
+        for opp in self.board.opponents:
+            if opp.halite < 500 and len(opp.ships) == 0 and self.player.halite > opp.halite: count += 1
+        # If count was more than 2 return True
+        return count >= 2
+
 
 class Decesion_shipyard:
     """ Decides a move for the shipyard. """
     def __init__(self, board, shipyard, step):
+        # Setting the values
+        self.yard = shipyard
+        self.board = board
+        self.step = step
+        # Possible moves
+        self.moves = {'convert': ShipyardAction.SPAWN,'stay': None}
+        self.grid = grid_5(shipyard.cell)
+        
+    def determine():
+        """ Returns the desirebale action. """
         pass
 
-    
-class WeightTendency:
+
+class LocateObject:
     """ 
-        Weights different tendencies for either to be offensive or deffensive for
+        Gets a board and a object (ship/shipyard) and returns a dictionary containing
+        the relative information of other objects to the passed object 
+    """
+    def __init__(self, board, obj):
+        self.board = board
+        self.player = obj.player
+        self.obj = obj
+        # Get the current_player's ship and shipyard ids
+        self.ship_ids = obj.player.ship_ids
+        self.shipyard_ids = obj.player.shipyard_ids
+    
+    def get_enemy_ships(self):
+        """ Returns enemy ships in a list"""
+        ships = []
+        for ship in board.ships:
+            if not (ship.id in self.ship_ids)
+                ships.append(ship)
+            
+    
+    def locate_ships(self):
+        # Get the enemy and player ships
+        my_ships = self.player.ships
+        opp_ships = get_enemy_ships()
+    
+class ShipTendency:
+    """ 
+        Weights different options for either to be offensive or deffensive for
         a given ship at any position on the board
     """
     def __init__(self, board, ship):
-        pass
+        # Get the values
+        self.board = board
+        self.ship = ship
     
+
+class ShipyardTendency:
+    """ 
+        Weights different options for either to be offensive or deffensive for
+        a given shipyard at any position on the board
+    """
+    def __init__(self, board, shipyard):
+        # Get the values
+        self.board = board
+        self.yard = shipyard
+
+###############################
+# Helper Functions for objects#
+###############################
+def grid_5(cell):
+    """
+        Returns a dictionary based on the cells in 
+        the surrounding 5x5 area of a given cell
+    """
+    # Main ones
+    north = cell.north
+    south =cell.south
+    west = cell.west
+    east = cell.east
+    # Secondary ones
+    nn = north.north
+    ss = south.south
+    ww = west.west
+    ee = east.east
+        
+    return {
+        1: {'N': north, 'S': south, 'W': west, 'E': east}, 
+        2: {
+            'NW': north.west, 'NE': north.east, 'SW': south.west, 'SE': south.east,
+            'WW': ww, 'EE': ee, 'NN': nn, 'SS': ss
+            },
+        3: {
+             'NEN': nn.east, 'NWN': nn.west, 'SES': ss.east, 'SWS': ss.west, 
+             'SEE': ee.south, 'NEE': ee.north, 'SWW': ww.south, 'NWW': ww.north
+        },
+        4: {'SEES': ee.south.south , 'NEEN': ee.north.north, 'NWWN': ww.north.north, 'SWWS': ww.south.south}
+    }        
+
+
+def sigmoid(val):
+    """ Given a value, feeds it to a sigmoid function. """
+    import numpy as np
+    
+    return 1 / 1 + np.exp(-1 * val)
+
+
+
+def count_moves(point1, point2, size=20):
+    """ 
+        Returns the minimum number of between moves 
+        to go from point1 to point2. 
+    """
+    # Break the points into coordinates
+    x1, y1 = point1
+    x2, y2 = point2
+
+
+def measure_distance(point1, point2, size=20):
+    """ 
+        Returns the distance between two points. 
+    """
+    # Break the points into coordinates
+    x1, y1 = point1
+    x2, y2 = point2
+
+    dist1 = ((x2 - x1) ** 2 + (y1 - y2) ** 2) ** (0.5)
+    dist1 = ((x2 - x1) ** 2 + (y1 - y2) ** 2) ** (0.5)
+    dist1 = ((x2 - x1) ** 2 + (y1 - y2) ** 2) ** (0.5)
+
 
 # Global values
 acts = {
@@ -205,44 +296,6 @@ acts = {
     'spawn': ShipyardAction.SPAWN, 'convert': ShipAction.CONVERT,
     'mine': None
 }
-
-        
-def get_neighbors(cell):
-    # returns sorounding cells for a point
-    return {
-        'N': cell.north, 'NW': cell.north.west, 'NE': cell.north.east,
-        'S': cell.south, 'SW': cell.south.west, 'SE': cell.south.east,
-        'WW': cell.west.west, 'EE': cell.east.east,
-        'NN': cell.north.north, 'SS': cell.south.south,
-        'W': cell.west, 'E': cell.east
-    }
-
-
-
-def randomize(choices=[]):
-    import random
-    
-    if len(choices) == 0:
-        choices = list(acts.items())
-    
-    choice = random.choice(choices)
-    
-    if choice[0] == 'spawn' or  choice[0] == 'convert':
-        return randomize(exclude)
-    
-    return choice[1]
-
-
-def choose_between(l=[]):
-    import random
-    
-    if l != []:
-        random.choice(l)
-    
-    return random.choice([acts['N'], acts['W'],acts['E'],acts['S'], acts['mine']])
-
-
-
 
 def agent(obs, config):
     # Make the board
