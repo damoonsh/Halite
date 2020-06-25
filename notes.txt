@@ -14,3 +14,8 @@ we need consider other
 	- **Stimulator: Given that I fail to choose solution I would randomly go ahead
 		and choose an action and run the board forward each time for each of the actions
 		then I would rank their outcomes and actually choose one of them.
+
+	- Debugging: have a global string and each time when you would log sth just add to that
+		string then at certain intervals output the things you want to output, or even log it to another 
+		.txt file
+		
