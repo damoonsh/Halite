@@ -10,7 +10,10 @@ we need consider other
 	- A class that predict the most possible move by the near by ship:
 		- Check the ship's N,S,W,E and choose the one the most number of halites
 		and if the cargo was more than mine then go and vice-versa
-
+	
+	- Include more variables in ShipTendency and evaluate the rank relative to other ships as well,
+		generally complicate the object more than ever then balance with DecisionShip.
+	
 	- **Stimulator: Given that I fail to choose solution I would randomly go ahead
 		and choose an action and run the board forward each time for each of the actions
 		then I would rank their outcomes and actually choose one of them.
