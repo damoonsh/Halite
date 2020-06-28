@@ -21,4 +21,7 @@ we need consider other
 	- Debugging: have a global string and each time when you would log sth just add to that
 		string then at certain intervals output the things you want to output, or even log it to another 
 		.txt file
-		
+	
+	- Keep track of the moves the ships are making to see if they are being chased or not?
+	
+	- rewrire loate_object and grid stat
