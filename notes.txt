@@ -1,33 +1,18 @@
 The logic is to build a flexible bot that will be able to scale given different circumstances. In order to do that
 we need consider other 
 
+In the previous version, I was eliminating moves and then weighting a 5 by 5 grid then adding them together to get a value.
+With the new approach that I am taking now, instead of hard coding actions, for given situations the moves will be evaluated
+and then the move with the highest value will be chosen.
 
-instead of eliminating moves, weight different scernarios and test the weights. Even the mining and converting should be
+In this new approach, the weighting is more decentralized and many more scenarios will be considered. There is but one simple
+rule in the weightings the values will be used to weight would be between -10 to 10. And other parameters involved in the 
+problem will be counted towards the optimal goal.
+
+instead of eliminating moves, weight different scenarios and test the weights. Even the mining and converting should be
 tested during other scenarios.
 
 # Implement: 
-	- A class(es) that calculates the tendency to either attack or defend.
     - A set of testing environments to see how the algorithm would react:
-        run a series of command on all of the ships and shipayrd to make them
+        run a series of command on all of the ships and shipyard to make them
         orient in a certain way.
-        
-        - tRACK THE MOVEMENTS THAT DECIDES IF THE SHIPS ISRUNNNING AWAY AND WOULD HEAD TWORDS THE  NEAREST SHIPYARD.
-        
-	- A class that predict the most possible move by the near by ship:
-		- Check the ship's N,S,W,E and choose the one the most number of halites
-		and if the cargo was more than mine then go and vice-versa
-	
-	- Include more variables in ShipTendency and evaluate the rank relative to other ships as well,
-		generally complicate the object more than ever then balance with DecisionShip.
-	
-	- **Stimulator: Given that I fail to choose solution I would randomly go ahead
-		and choose an action and run the board forward each time for each of the actions
-		then I would rank their outcomes and actually choose one of them.
-
-	- Debugging: have a global string and each time when you would log sth just add to that
-		string then at certain intervals output the things you want to output, or even log it to another 
-		.txt file
-	
-	- Keep track of the moves the ships are making to see if they are being chased or not?
-	
-	- rewrire loate_object and grid stat
