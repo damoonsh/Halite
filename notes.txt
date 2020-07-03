@@ -2,11 +2,17 @@ The logic is to build a flexible bot that will be able to scale given different 
 we need consider other 
 
 
+instead of eliminating moves, weight different scernarios and test the weights. Even the mining and converting should be
+tested during other scenarios.
+
 # Implement: 
 	- A class(es) that calculates the tendency to either attack or defend.
     - A set of testing environments to see how the algorithm would react:
         run a series of command on all of the ships and shipayrd to make them
         orient in a certain way.
+        
+        - tRACK THE MOVEMENTS THAT DECIDES IF THE SHIPS ISRUNNNING AWAY AND WOULD HEAD TWORDS THE  NEAREST SHIPYARD.
+        
 	- A class that predict the most possible move by the near by ship:
 		- Check the ship's N,S,W,E and choose the one the most number of halites
 		and if the cargo was more than mine then go and vice-versa
