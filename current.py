@@ -1,7 +1,6 @@
 from kaggle_environments.envs.halite.helpers import *
 import pandas as pd
 
-
 class Decision_Ship:
     """ 
         Decides ship's next move:
@@ -12,7 +11,6 @@ class Decision_Ship:
         returns:
             determine: returns the next-action that should be taken
     """
-    # Implement a function that measures the nearest shipyards
     def __init__(self, board, ship):
         # Given values
         self.board = board
@@ -102,10 +100,16 @@ class Decision_Ship:
                 else: 
                     # If it was not my shipyard
                     self.attack_enemy_shipyard(self.grid[direction].shipyard_id)
-    
+
+            # Just to trigger some movement in the main four directions given that they were no ship/shipyards
+            if 'N' in Dir: self.weights['N'] += self.grid[direction].halite / (self.grid[direction].moves - 0.5)
+            if 'W' in Dir: self.weights['W'] += self.grid[direction].halite / (self.grid[direction].moves - 0.5)
+            if 'E' in Dir: self.weights['E'] += self.grid[direction].halite / (self.grid[direction].moves - 0.5)
+            if 'S' in Dir: self.weights['S'] += self.grid[direction].halite / (self.grid[direction].moves - 0.5)
+
 
     def weight_convert(self, threshold=2000):
-        """ Weights converting for the ship. """
+        """ Weights the option for ship convertion. """
         # 1. If they are no shipyards left
         no_yards_left = len(self.player.shipyards) == 0
         # 2. If it is the end of the game and we have more than 500 halite in our cargo
@@ -294,6 +298,7 @@ class Decision_Ship:
         return count >= 2
     
 class Locator:
+    """ This object returns dataframes containing the information about other ships/shipyards on the map and also in the given ship's grid. """
     def __init__(self, board, ship):
         self.board = board
         self.ship = ship
@@ -382,9 +387,7 @@ class Locator:
 ####################
 
 def grid(cell):
-    """
-        Returns a dictionary of cells which are in 4 moves distance of the given cell
-    """
+    """ Returns a dictionary of cells which are in 4 moves distance of the given cell """
     # The directions that are one move away
     north, south, west, east = cell.north, cell.south, cell.west, cell.east
     # The directions that are two moves away
@@ -392,6 +395,7 @@ def grid(cell):
 
     return {
         'N': north, 'S': south, 'W': west, 'E': east, 
+
         'NW': north.west, 'NE': north.east, 'SW': south.west, 'SE': south.east, 'WW': ww, 'EE': ee, 'NN': nn, 'SS': ss ,
         
         'NEN': nn.east, 'NWN': nn.west, 'SES': ss.east, 'SWS': ss.west, 
