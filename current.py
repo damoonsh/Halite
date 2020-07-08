@@ -25,7 +25,7 @@ class Decision_Ship:
         self.simple_moves = {'N': ship.cell.north, 'S': ship.cell.south, 'W': ship.cell.west, 'E': ship.cell.east}
         
         # All moves ship can take
-        self.moves = {"N": ShipAction.NORTH, 'S': ShipAction.SOUTH, 'W': ShipAction.WEST , 
+        self.moves = {"N": ShipAction.NORTH, 'S': ShipAction.SOUTH, 'W': ShipAction.WEST, 
                       'E' : ShipAction.EAST, 'convert': ShipAction.CONVERT, 'mine': None}
     
         # Weights of different moves
@@ -107,6 +107,9 @@ class Decision_Ship:
             if 'E' in Dir: self.weights['E'] += self.grid[direction].halite / (self.grid[direction].moves - 0.5)
             if 'S' in Dir: self.weights['S'] += self.grid[direction].halite / (self.grid[direction].moves - 0.5)
 
+            # In order to keep the mining as an option as well
+            self.weights['mine'] += (self.current_cell - self.grid[direction].halite) / (self.grid[direction].moves - 0.5)
+
 
     def weight_convert(self, threshold=2000):
         """ Weights the option for ship convertion. """
@@ -128,8 +131,7 @@ class Decision_Ship:
     
 
     def deposit(self, shipyard_id):
-        """ Weights the tendency to deposit and adds to the directions which lead to 
-        the given shipyard. """
+        """ Weights the tendency to deposit and adds to the directions which lead to the given shipyard. """
         # Get the ship's info
         shipyard = self.Shipyards[shipyard_id]
         oppCargo = ship.halite
@@ -222,11 +224,14 @@ class Decision_Ship:
         if dirY != None: self.weights[dirX] += 10 * self.ship_cargo / moves    
         
     # Implement this function
-    def analyze_shipyard_souroundings(self, shipyard_id):
+    def analyze_shipyard_surroundings(self, shipyard_id):
         """ Checks to see if a given shipyard needs protection or not? """
         shipyard = self.Shipyards[shipyard_id]
         
-        shipyard_grid = Locator(self.board, shipyard).generate_grid_df()
+        shipyard_locator = Locator(self.board, shipyard)
+        shipyard_grid = shipyard_locator.generate_grid_df()
+
+         
 
     
     def avoid_self_colision(self, ship_id):
