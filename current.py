@@ -79,6 +79,8 @@ class Decision_Ship:
                 3. If there is one of my shipyards: possibly deposit or ignore, also check for protection
                 4. If there is an enemy shipyard: depending on the situation might attack it
         """
+        self.weight_convert()
+        self.shipyard_status()
         # list of all directions in 5 moves apart
         dirs = list(self.grid.columns)
         # Iterate through different directions
@@ -102,13 +104,14 @@ class Decision_Ship:
                     self.attack_enemy_shipyard(self.grid[direction].shipyard_id)
 
             # Just to trigger some movement in the main four directions given that they were no ship/shipyards
-            if 'N' in Dir: self.weights['N'] += self.grid[direction].halite / (self.grid[direction].moves - 0.5)
-            if 'W' in Dir: self.weights['W'] += self.grid[direction].halite / (self.grid[direction].moves - 0.5)
-            if 'E' in Dir: self.weights['E'] += self.grid[direction].halite / (self.grid[direction].moves - 0.5)
-            if 'S' in Dir: self.weights['S'] += self.grid[direction].halite / (self.grid[direction].moves - 0.5)
+            if 'N' in direction: self.weights['N'] += self.grid[direction].halite / (self.grid[direction].moves - 0.5)
+            if 'W' in direction: self.weights['W'] += self.grid[direction].halite / (self.grid[direction].moves - 0.5)
+            if 'E' in direction: self.weights['E'] += self.grid[direction].halite / (self.grid[direction].moves - 0.5)
+            if 'S' in direction: self.weights['S'] += self.grid[direction].halite / (self.grid[direction].moves - 0.5)
 
-            # In order to keep the mining as an option as well
-            self.weights['mine'] += (self.current_cell - self.grid[direction].halite) / (self.grid[direction].moves - 0.5)
+            # In order to keep the mining as an option as well: the mining option will get add to only if amount of grid in
+            # the current cell is higher than other places
+            self.weights['mine'] += (self.current_cell.halite - self.grid[direction].halite) / (self.grid[direction].moves - 0.5)
 
 
     def weight_convert(self, threshold=2000):
@@ -133,10 +136,10 @@ class Decision_Ship:
     def deposit(self, shipyard_id):
         """ Weights the tendency to deposit and adds to the directions which lead to the given shipyard. """
         # Get the ship's info
-        shipyard = self.Shipyards[shipyard_id]
-        oppCargo = ship.halite
+        shipyard = self.board.shipyards[shipyard_id]
         moves = (self.Shipyards[shipyard_id].moves - 0.5) # Smoothing
         # Don't get too far from the shipyard
+        log(self.Shipyards)
         closest_shipyard_id = self.Shipyards.T['moves'].idxmin()
         closest_shipyard_dist = (self.Shipyards[closest_shipyard_id].moves + 0.7) # Smoothing
         
@@ -207,7 +210,7 @@ class Decision_Ship:
         could have a higher value and hence tendency.
         """
         # Get the ship's info
-        ship = self.Ships[ship_id]
+        ship = self.board.ships[ship_id]
         oppCargo = ship.halite
         moves = (self.Ships[ship_id].moves - 0.5) # Smoothing
         
@@ -222,18 +225,36 @@ class Decision_Ship:
         
         if dirX != None: self.weights[dirX] += 10 * self.ship_cargo / moves
         if dirY != None: self.weights[dirX] += 10 * self.ship_cargo / moves    
+    
+    
+    def shipyard_status(self):
+        """ This function gives tendency to go to shipyards within the map. """
+        if not self.Shipyards.empty:
+            for shipyard_id in list(self.Shipyards.columns):
+                self.analyze_shipyard_surroundings(shipyard_id)
         
-    # Implement this function
+        
     def analyze_shipyard_surroundings(self, shipyard_id):
         """ Checks to see if a given shipyard needs protection or not? """
-        shipyard = self.Shipyards[shipyard_id]
+        shipyard = self.board.shipyards[shipyard_id]
         
         shipyard_locator = Locator(self.board, shipyard)
         shipyard_grid = shipyard_locator.generate_grid_df()
 
-         
-
-    
+        for direction in list(shipyard_grid.columns):
+            ship_id = shipyard_grid[direction].ship_id
+            
+            if not pd.isna(ship_id):
+                dirX, dirY = self.determine_directions(self.current_position, shipyard.position)
+                moves = abs(shipyard_grid[direction]['moves'] - 0.5)
+                if shipyard_grid[direction].my_ship == 1:
+                    if dirX != None: self.weights[dirX] += -1 * self.ship_cargo / moves
+                    if dirY != None: self.weights[dirY] += -1 * self.ship_cargo / moves
+                else:
+                    if dirX != None: self.weights[dirX] += 3 * self.ship_cargo / moves
+                    if dirY != None: self.weights[dirY] += 3 * self.ship_cargo / moves
+        
+                
     def avoid_self_colision(self, ship_id):
         """ This function is called to avoid the ships collision 
             - The number moves required to reach the ship is also an important factor 
@@ -241,10 +262,10 @@ class Decision_Ship:
         # This would also encourage for mining
         self.weights['mine'] += 10
         # Getting ship's info
-        ship = self.Ships[ship_id]
-        moves = (self.Ships[ship_id].moves - 0.5)
+        ship = self.board.ships[ship_id]
+        moves = abs(self.Ships[ship_id].moves - 0.5)
         # Getting the direction to the ship
-        dirX, dirY = self.determine_directions(self.current_position, ship)
+        dirX, dirY = self.determine_directions(self.current_position, ship.position)
         # Should have the highest negative value
         if dirX != None: self.weights[dirX] += -10 * self.ship_cargo / moves
         if dirY != None: self.weights[dirY] += -10 * self.ship_cargo / moves
@@ -385,7 +406,6 @@ class Locator:
             all_dirs[direction] = base_info
             
         return pd.DataFrame(all_dirs)
-      
         
 ####################
 # Helper Functions #
