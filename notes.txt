@@ -16,3 +16,9 @@ They are different aspect to this agent:
 # Implement: 
     - A set of testing environments to see how the algorithm would react: run a series of command on all of the ships and shipyard to make them orient in a certain way.
 	- Write debug logs for every single possible place to check for messed up parts and also track the flow of weighting and fine-tune the process.
+    - it is exhaustive to try to reduce the weights so they won't be chosen, instead manually eliminate moves. 
+# Fixes: 
+    - There should be an extra stress when a given cell is full of halite
+    - Also, the weight for convert should be high
+    - Some shipyards don't have either a vertical or horizontal difference so don't add that
+    - Also, if there was a (mine) shipyard and ship on a cell don't go there

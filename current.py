@@ -27,7 +27,9 @@ class Decision_Ship:
         # All moves ship can take
         self.moves = {"N": ShipAction.NORTH, 'S': ShipAction.SOUTH, 'W': ShipAction.WEST, 
                       'E' : ShipAction.EAST, 'convert': ShipAction.CONVERT, 'mine': None}
-    
+         # The set of moves that should not be taken
+        self.eliminated_moves = []
+
         # Weights of different moves
         self.weights = {"N": 0, "E": 0, "W": 0, "S": 0, "mine": 0, "convert": 0}
         
@@ -45,7 +47,7 @@ class Decision_Ship:
         """ Returns the next action decided for the ship based on the observations that have been made. """
         # Get the weights for main four directions
         self.weight_moves()
-        
+        self.round()
         # Decide between moves
         sorted_weights = {k: v for k, v in sorted(self.weights.items(), key=lambda item: item[1], reverse=True)}
         
@@ -54,7 +56,7 @@ class Decision_Ship:
         # Choose the action with highest value if it has not been eliminated
         for action in sorted_weights.keys():
             if action in self.moves.keys():
-                log('next_move:' + action)
+                log(' ## next_move:' + action)
                 return self.moves[action]
         
         # If none were chosen, then just return the default move which is mining
@@ -84,7 +86,7 @@ class Decision_Ship:
         dirs = list(self.grid.columns)
         # Iterate through different directions
         for direction in dirs:
-            log('  current-direction: ' + direction)
+            # log('  current-direction: ' + direction)
             # If there was a ship
             if not pd.isna(self.grid[direction].ship_id):
                 # If it was my ship
@@ -103,7 +105,7 @@ class Decision_Ship:
                     # If it was not my shipyard
                     self.attack_enemy_shipyard(self.grid[direction].shipyard_id)
             trigger_value = self.grid[direction].halite / (self.grid[direction].moves - 0.5)
-            log('     adding ' + str(trigger_value) + " to the any of the main four!")
+            # log('     adding ' + str(trigger_value) + " to the any of the main four!")
             # Just to trigger minimum movement in the main four directions given that they were no ship/shipyards
             if 'N' in direction: self.weights['N'] += trigger_value
             if 'W' in direction: self.weights['W'] += trigger_value
@@ -112,7 +114,7 @@ class Decision_Ship:
 
         # In order to keep the mining as an option as well: the mining option will get add to only if amount of grid in the current cell is higher than other places
         mining_trigger = (self.current_cell.halite - self.grid[direction].halite) * 5
-        log('  At the end of the directions adding ' +  str(mining_trigger) + ' to the mining weight.')
+        # log('  At the end of the directions adding ' +  str(mining_trigger) + ' to the mining weight.')
         self.weights['mine'] += mining_trigger
 
         self.weight_convert()
@@ -299,7 +301,7 @@ class Decision_Ship:
         dirX, dirY = self.Ships[ship_id]['dirX'], self.Ships[ship_id]['dirY']
         if self.Ships[ship_id].moves == 1:
             highly_negating = -100 * (self.ship_cargo + 10)
-            log('  Highly: ' + str(highly_negating))
+            log('  Highly: ' + str(highly_negating) + ' to ' + dirX + ' to ' + dirY)
             # If one my own ships was one move away then highly negate that direction
             self.weights[dirX] = highly_negating
             self.weights[dirY] = highly_negating
@@ -307,7 +309,7 @@ class Decision_Ship:
             # if the ship was not one move away then the negation don't to be a lot
             moves = self.Ships[ship_id].moves - 0.5
             low_negating = -10 * (self.ship_cargo + 10) / moves
-            log('  not so highly: ' + str(low_negating))
+            log('  not so highly: ' + str(low_negating) + ' moves: ' + str(self.Ships[ship_id].moves))
             # The highest negative weight and the ship's cargo divided by the moves
             self.weights[dirX] += low_negating
             self.weights[dirY] += low_negating
@@ -325,6 +327,15 @@ class Decision_Ship:
                 
         # If count was more than 2 return True
         return count >= 2
+
+    def round(self):
+        self.weights['mine'] = round(self.weights['mine'], 2)
+        self.weights['N'] = round(self.weights['N'], 2)
+        self.weights['S'] = round(self.weights['S'], 2)
+        self.weights['E'] = round(self.weights['E'], 2)
+        self.weights['W'] = round(self.weights['W'], 2)
+        self.weights['convert'] = round(self.weights['convert'], 2)
+
 
 
 class ShipyardDecision:
@@ -527,7 +538,7 @@ log('logs:', 0)
 def agent(obs, config):
     # Make the board
     board = Board(obs,config)
-#     log(board)
+    
     #Step of the board
     step = board.observation['step']
     # Current player info
@@ -545,7 +556,7 @@ def agent(obs, config):
             ship.next_action = decider.determine()
             
             new_board = board.next()
-        
+        log('#########')
     for shipyard in me.shipyards:
         # If there were no ships on the yard
         if new_board.shipyards[shipyard.id].cell.ship == None and step < 392:
