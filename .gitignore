@@ -1,4 +1,5 @@
 .ipynb_checkpoints/
+.vscode/
 Player.py
 Cell.py
 Board.py
