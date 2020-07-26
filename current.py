@@ -14,7 +14,7 @@ class Decision_Ship:
     def __init__(self, board, ship):
         # Given values
         self.board = board
-        self.step = board.observation['step']
+        self.step = board.observation['step'] + 1
         self.ship = ship
         self.ship_cargo = ship.halite
         self.current_cell = ship.cell
@@ -66,7 +66,7 @@ class Decision_Ship:
     def weight_moves(self):
         """ 
             This is the main function and runs other helper functions within the module to in order to weight
-            the different moves that are going to be taken.
+            the different moves that could be taken.
 
             The weightings will take numerous considerations into account (halite, closeness to shipyard, etc.)
             yet there are going to be multiplied by some values manually in order to encourage or discourage certain
@@ -90,14 +90,19 @@ class Decision_Ship:
             if not pd.isna(self.grid[direction].ship_id):
                 # If it was my ship
                 if self.grid[direction].my_ship == 1:
-                    # If there was one of my own ships and the it took one move to hit it:
                     if self.Ships[self.grid[direction].ship_id]['moves'] == 1:
-                        self.eliminated_moves.append(direction)
+                        self.eliminated_moves.append(direction) # Just don't go there
                     else:
                         self.avoid_self_colision(self.grid[direction].ship_id)
                 else:
-                    # If it was not my ship 
-                    self.deal_enemy_ship(self.grid[direction].ship_id)
+                    # If it was not my ship
+                    if self.Ships[self.grid[direction].ship_id]['moves'] == 1 and self.Ships[self.grid[direction].ship_id]['cargo'] < self.ship_cargo:
+                        # If there was an enemy ship one move away with less halite then eliminate the move
+                        self.eliminated_moves.append(direction)
+                        # Also mining would not be a good idea
+                        self.eliminated_moves.append('mine')
+                    else:
+                        self.deal_enemy_ship(self.grid[direction].ship_id)
             
             # If there was a shipyard
             if not pd.isna(self.grid[direction].shipyard_id):
@@ -183,7 +188,7 @@ class Decision_Ship:
     
     
     def deal_enemy_ship(self, ship_id):
-        """ This function will be evaluate to either attack or get_away from the ship based on
+        """ This function will be evaluate to either attack or get_away from an enemy ship based on
         the simple observation: If my ship had more cargo then I should not attack. """
         # The amount of cargo caried by the opponent's ship
         oppCargo = self.Ships[ship_id].cargo
@@ -197,6 +202,7 @@ class Decision_Ship:
     
     
     def attack_enemy_ship(self, ship_id, diff):
+        """ This function encourages attacking the enemy ship. """
         # Get the ship's info
         moves = (self.Ships[ship_id].moves - 0.5) # Smoothing
         log('   -attacking enemy ship')
@@ -211,23 +217,20 @@ class Decision_Ship:
         
     
     def get_away(self, ship_id):
-        """ This function is called when our ship has a possible change of getting followed
+        """ This function is called when my ship has a possible change of getting followed
         by another enemy ship with lower halite.
         There can multiple options that given the parameters and the manual weightings one
         could have a higher value and hence tendency.
         """
-        # The directions that goes to the ship should be negative
         log('   get away')
-        moves = (self.Ships[ship_id].moves - 0.5) # Smoothing
+        moves = self.Ships[ship_id].moves
         dirX, dirY =self.Ships[ship_id]['dirX'], self.Ships[ship_id]['dirY']
 
-        direction_discouragement = -1 * self.ship_cargo / moves
+        direction_discouragement = -10 * (self.ship_cargo + 5) / moves
         self.weights[dirX] += direction_discouragement
         self.weights[dirY] += direction_discouragement
-        log('   adding ' + str(direction_discouragement) + ' to ' + dirX + ' and ' + dirY)
 
-        # If the ship was one move away then don't mine
-        if self.Ships[ship_id].moves == 1: self.eliminated_moves.append('mine')
+        log('   adding ' + str(direction_discouragement) + ' to ' + dirX + ' and ' + dirY)
         
         # The weights for the closest shipyard goes up.
         closest_shipyard_id = self.closest_shipyard()
@@ -236,10 +239,12 @@ class Decision_Ship:
         if closest_shipyard_id != 0:
             log('  closest_id: ' + closest_shipyard_id)
             dirX, dirY = self.Shipyards[closest_shipyard_id]['dirX'], self.Shipyards[closest_shipyard_id]['dirY']
-            moves_to_shipyard = self.Shipyards[closest_shipyard_id]['moves'] + 1
+            # moves_to_shipyard = self.Shipyards[closest_shipyard_id]['moves']
 
-            closest_shipyard_encouragement = self.ship_cargo / moves_to_shipyard
+            closest_shipyard_encouragement = 10 * (self.ship_cargo + 10)
+            
             log('   adding ' + str(closest_shipyard_encouragement) + ' to ' + dirX + ' and ' + dirY)
+            
             self.weights[dirX] += closest_shipyard_encouragement
             self.weights[dirY] += closest_shipyard_encouragement
 
@@ -295,14 +300,18 @@ class Decision_Ship:
                     
                 
     def avoid_self_colision(self, ship_id):
-        """ This function is called to avoid lower the tendency for cell with enemy ships. """
+        """ This function is called to avoid lower the tendency for cell with my own ships. """
         log('  Avoid Collision')
 
         # Getting ship's info
         dirX, dirY = self.Ships[ship_id]['dirX'], self.Ships[ship_id]['dirY']
-        moves = self.Ships[ship_id].moves + 1
-        discourage = -1 * (self.ship_cargo + 10) / moves
-        log('  -discourage collision: ' + str(discourage) + ' moves: ' + str(self.Ships[ship_id].moves))
+        moves = self.Ships[ship_id].moves
+        oppShipCargo = self.Ships[ship_id].cargo
+        diff = abs(self.ship_cargo - oppShipCargo) / 100 # Scale the value
+
+        # Given that they are not one move apart the discouragement should not be that strong
+        discourage = -1 * (diff + 10) / moves
+        log('  -discourage collision: ' + str(discourage) + ' moves: ' + str(self.Ships[ship_id].moves) + ", diff: " + str(diff))
         
         self.weights[dirX] += discourage
         self.weights[dirY] += discourage
@@ -330,7 +339,7 @@ class Decision_Ship:
 
 
     def round(self):
-        """ This functions rounds the  weights so they can be easily printed"""
+        """ This functions rounds the  weights so they can be easily printed """
         self.weights['mine'] = round(self.weights['mine'], 1)
         self.weights['N'] = round(self.weights['N'], 1)
         self.weights['S'] = round(self.weights['S'], 1)
