@@ -21,7 +21,7 @@ class Decesion_Ship:
         if len(self.player.shipyards) == 0:
             return self.moves['convert']
         
-        if self.step >= 395 and self.ship.halite > 500:
+        if (self.step >= 395 or self.near_end()) and self.ship.halite > 500:
             return self.moves['convert']
 
         if self.ship.halite > 1500:
@@ -125,7 +125,14 @@ class Decesion_Ship:
         
         return round(w, 3)
                     
-        
+    def near_end(self):
+        """ Returns True if the game is almost over. """
+        count = 0
+        # If the halite was less than 500 and it had no ships
+        for opp in self.board.opponents:
+            if opp.halite < 500 and len(opp.ships) == 0 and self.player.halite > opp.halite: count += 1
+        # If count was more than 2 return True
+        return count >= 2
     
     def grid_5(self):
         """

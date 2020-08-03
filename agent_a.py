@@ -1,6 +1,4 @@
-
 from kaggle_environments.envs.halite.helpers import *
-
 
 class Decesion_Ship:
     def __init__(self, board, ship, step):
@@ -22,14 +20,18 @@ class Decesion_Ship:
         if len(self.player.shipyards) == 0:
             return self.moves['convert']
         
-        if self.step < 300 and self.ship.halite > 1000:
+        if (self.step >= 395 or self.near_end()) and self.ship.halite > 500:
             return self.moves['convert']
+
+        if self.ship.halite > 1500:
+            return self.moves['convert']  
         
         weights = self.weight_moves()
         
-        max_move = max(weights, key=weights.get)
-        
-#         print(max_move, self.moves.keys())
+        if len(weights) > 0:
+            max_move = max(weights, key=weights.get)
+        else:
+            return self.moves['mine']
         
         if 'mine' in self.moves.keys() and (self.ship.cell.halite) > weights[max_move]:
             return self.moves['mine']
@@ -42,7 +44,7 @@ class Decesion_Ship:
             This functions weights different points based on their properties and
             returns a dictionary of weights to choose from.
         """
-        
+        # ADD the 1 2 3 4 moves
         # First stage: eliminations
         self.first_stage()
         weights = {}
@@ -59,9 +61,8 @@ class Decesion_Ship:
                 for index in  range(2, 5):
                     for sub_Dir, sub_cell in self.grid[str(index)].items():
                         if Dir in sub_Dir:
-                            weights[Dir] += self.weight_cell(sub_cell)
+                            weights[Dir] += self.weight_cell(sub_cell) 
                             
-#         print(', weights: ', weights.keys())
         return weights
                     
     
@@ -72,7 +73,6 @@ class Decesion_Ship:
             'GET_away': Dont stay in the current position and took one of the other path than this one
             '': just weight and see which one works better
         """
-        
         # If there was a ship/shipyard in E,N,W,or E
         for Dir, cell in self.grid["1"].items():
             cell_ship = cell.ship
@@ -95,7 +95,6 @@ class Decesion_Ship:
                         if 'mine' in self.moves.keys():
                             del self.moves['mine']
                         
-#         print('First_stage=', self.moves.keys(), end='')
                     
     
     def weight_cell(self, cell):
@@ -105,7 +104,6 @@ class Decesion_Ship:
         cell_yard = cell.shipyard
         
         w += (cell.halite - self.ship_halite) + 2
-        
         
         if cell_ship != None:
             if cell_ship.id in self.player.ship_ids:
@@ -125,11 +123,18 @@ class Decesion_Ship:
         
         return round(w, 3)
                     
-        
+    def near_end(self):
+        """ Returns True if the game is almost over. """
+        count = 0
+        # If the halite was less than 500 and it had no ships
+        for opp in self.board.opponents:
+            if opp.halite < 500 and len(opp.ships) == 0 and self.player.halite > opp.halite: count += 1
+        # If count was more than 2 return True
+        return count >= 2
     
     def grid_5(self):
         """
-            retuns a 5x5 dictionary as a dictionary
+            Returns a 5x5 dictionary as a dictionary
             1 means cells where you can reach with one move, etc.
         """
         north = self.ship.cell.north
@@ -208,24 +213,24 @@ def agent(obs, config):
     
     for ship in me.ships:
         
-        decider = Decesion_Ship(new_board, ship, step)
+#         decider = Decesion_Ship(new_board, ship, step)
+        decider = Decesion_Ship(new_board, new_board.ships[ship.id], step)
         ship.next_action = decider.determine()
         
         new_board = board.next()
     
+    #Implemenet a pipeline where given that
     for shipyard in me.shipyards:
-       
-        if len(me.ships) == 0:
-            shipyard.next_action = acts['spawn']
-        
-        if step < 20 and step % 3 == 1:
-            shipyard.next_action = acts['spawn']
-        
-        if step > 100 and me.halite > (len(me.shipyards) + 4) * 200:
-            shipyard.next_action = acts['spawn']
-            
-        if step > 200 and me.halite > 10000:
-            shipyard.next_action = acts['spawn']
+        # If there were no ships on the yard
+        if new_board.shipyards[shipyard.id].cell.ship == None and step < 392:
+            if len(me.ships) == 0:
+                shipyard.next_action = acts['spawn']
+
+            if step < 150 and step % 3 == 1:
+                shipyard.next_action = acts['spawn']
+
+            if step > 200 and me.halite > 10000 + len(me.ships) * 1000:
+                shipyard.next_action = acts['spawn']
         
         new_board = board.next()
 
