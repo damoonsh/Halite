@@ -1,9 +1,9 @@
-from kaggle_environments.envs.halite.helpers import *
+from kaggle_environments.envs.halite.helpers import Point, Board, ShipAction, ShipyardAction
 import pandas as pd
 
 class Decision_Ship:
     """ 
-        Decides ship's next move:
+        Decides ship's next move
         params:
             board: the board that we will base our decisions on
             ship: the ship we are deciding for
@@ -14,15 +14,15 @@ class Decision_Ship:
     def __init__(self, board, ship):
         # Given values
         self.board = board
-        self.step = board.observation['step'] + 1
         self.ship = ship
-        self.ship_cargo = ship.halite
-        self.current_cell = ship.cell
-        self.current_position = ship.position
         
         # Some usefull properties
         self.player = self.board.current_player  # Player
-        
+        self.ship_cargo = ship.halite
+        self.current_cell = ship.cell
+        self.current_position = ship.position
+        self.step = board.observation['step'] + 1
+
         # All moves ship can take
         self.moves = {"N": ShipAction.NORTH, 'S': ShipAction.SOUTH, 'W': ShipAction.WEST, 
                       'E' : ShipAction.EAST, 'convert': ShipAction.CONVERT, 'mine': None}
@@ -40,6 +40,9 @@ class Decision_Ship:
         
         # Default move which is set to mining (None)
         self.next_move = None
+
+        # 
+        self.current_direction = ""
         
         
     def determine(self):
@@ -48,11 +51,11 @@ class Decision_Ship:
         self.weight_moves()
         self.round() # Round the weights
         self.apply_elimination() # Apply the eliminations
-        
+
         # Decide between moves
         sorted_weights = {k: v for k, v in sorted(self.weights.items(), key=lambda item: item[1], reverse=True)}
         
-        log('  weights:' + str(sorted_weights))
+        log('weights:' + str(sorted_weights))
         
         # Choose the action with highest value if it has not been eliminated
         for action in sorted_weights.keys():
@@ -86,6 +89,9 @@ class Decision_Ship:
         dirs = list(self.grid.columns)
         # Iterate through different directions
         for direction in dirs:
+            # Set the global direction to the one at hand
+            self.current_direction = direction
+
             # If there was a ship
             if not pd.isna(self.grid[direction].ship_id):
                 # If it was my ship
@@ -112,14 +118,35 @@ class Decision_Ship:
                     # If it was not my shipyard
                     self.attack_enemy_shipyard(self.grid[direction].shipyard_id)
 
+            # Consider the main four direction solely based on the halite amount
+            for main_dir in ["N", "S", "W", "E"]:
+                if main_dir in direction:
+                    moves_apart:float = direction.count(main_dir)
+                    main_dir_encourage = round(self.grid[direction].halite / moves_apart, 3)
+                    # log('    Adding direction: ' + main_dir + ', moves apart:' + str(moves_apart) + ', enc: ' + str(main_dir_encourage))
+                    self.weights[main_dir] += main_dir_encourage
+
             # In order to keep the mining as an option as well: the mining option will get add to only if amount of grid in the current cell is higher than other places
-            mining_trigger = (self.current_cell.halite - self.grid[direction].halite) / (100 * self.grid[direction].moves)
-            # log('  At the end of the directions adding ' +  str(mining_trigger) + ' to the mining weight.')
+            mining_trigger = round((self.current_cell.halite - self.grid[direction].halite) / self.grid[direction].moves, 3)
+            # log('    At the end of the directions adding ' +  str(mining_trigger) + ' to the mining weight.')
             self.weights['mine'] += mining_trigger
 
+        # The correlation of the mining with cell's halite
+        self.weights['mine'] = self.current_cell.halite ** 1.5
+        
+        # Convert the weights
         self.weight_convert()
         # self.shipyard_status()
 
+    def add_accordingly(self, dirX, dirY, value):
+        """ Adds a value to a weight according to the relative distance. """
+        rep_X = self.current_direction.count(dirX)
+        rep_Y = self.current_direction.count(dirY)
+
+        log('   adding ' + str(round(value, 3)) + ' to ' + dirX + 'moves: ' + str(rep_X) + ' and ' + dirY + ", moves: " + str(dirY))
+        
+        if rep_X != 0: self.weights[dirX] += value / rep_X
+        if rep_Y != 0: self.weights[dirY] += value / rep_Y
 
     def weight_convert(self, threshold=2000):
         """ Weights the option for ship convertion. """
@@ -144,15 +171,10 @@ class Decision_Ship:
         """ Weights the tendency to deposit and adds to the directions which lead to the given shipyard. """
         # Get the ship's info
         log('   deposit:')
-        moves = self.Shipyards[shipyard_id].moves
         dirX, dirY = self.Shipyards[shipyard_id].dirX, self.Shipyards[shipyard_id].dirY
-        
-        deposit_tendency = 10 * (self.ship_cargo + 10) / moves
-
-        log('   adding ' + str(round(deposit_tendency, 3)) + ' to ' + dirX + ' and ' + dirY)
-
-        self.weights[dirX] += deposit_tendency
-        self.weights[dirY] += deposit_tendency
+        # Tendency
+        deposit_tendency = 5 * self.ship_cargo
+        self.add_accordingly(dirX, dirY, deposit_tendency)
     
     
     def attack_enemy_shipyard(self, shipyard_id):
@@ -162,17 +184,13 @@ class Decision_Ship:
         # Get the shipyard's info
         shipyard = self.board.shipyards[shipyard_id]
         num_enemy_shipyards = len(shipyard.player.shipyards)
-        moves = self.Shipyards[shipyard_id].moves
         dirX, dirY = self.Shipyards[shipyard_id]['dirX'], self.Shipyards[shipyard_id]['dirY']
         
         log('  attacking enemy shipyard')
 
-        attacking_enemy_shipyard_tendency = 10 / (moves * (num_enemy_shipyards + 1))
-        
-        log('   adding ' + str(round(attacking_enemy_shipyard_tendency, 3)) + ' to ' + dirX + ' and ' + dirY)
+        attacking_enemy_shipyard_tendency = 10 / (num_enemy_shipyards + 1)
 
-        self.weights[dirX] += attacking_enemy_shipyard_tendency
-        self.weights[dirY] += attacking_enemy_shipyard_tendency
+        self.add_accordingly(dirX, dirY, attacking_enemy_shipyard_tendency)
     
     
     def deal_enemy_ship(self, ship_id):
@@ -192,17 +210,12 @@ class Decision_Ship:
     def attack_enemy_ship(self, ship_id, diff):
         """ This function encourages attacking the enemy ship. """
         # Get the ship's info
-        moves = self.Ships[ship_id].moves
         log('   -attacking enemy ship')
-        
         # Implement number of ships surrounding the shipyard
         dirX, dirY = self.Ships[ship_id]['dirX'], self.Ships[ship_id]['dirY']
-        attack_encouragement = 10 * (diff + 2) / moves
+        attack_encouragement = 10 * (diff + 2)
 
-        log('   adding ' + str(round(attack_encouragement, 3)) + ' to ' + dirX + ' and ' + dirY + ',moves: ' + str(moves))
-        
-        self.weights[dirX] += attack_encouragement
-        self.weights[dirY] += attack_encouragement
+        self.add_accordingly(dirX, dirY, attack_encouragement)
         
     
     def get_away(self, ship_id):
@@ -212,14 +225,10 @@ class Decision_Ship:
         could have a higher value and hence tendency.
         """
         log('   get away')
-        moves = self.Ships[ship_id].moves
         dirX, dirY =self.Ships[ship_id]['dirX'], self.Ships[ship_id]['dirY']
 
-        direction_discouragement = -10 * (self.ship_cargo + 5) / moves
-        self.weights[dirX] += direction_discouragement
-        self.weights[dirY] += direction_discouragement
-
-        log('   adding ' + str(round(direction_discouragement, 3)) + ' to ' + dirX + ' and ' + dirY)
+        direction_discouragement = -10 * (self.ship_cargo + 5)
+        self.add_accordingly(dirX, dirY, direction_discouragement)
         
         # The weights for the closest shipyard goes up.
         closest_shipyard_id = self.closest_shipyard()
@@ -228,14 +237,9 @@ class Decision_Ship:
         if closest_shipyard_id != 0:
             log('  closest_id: ' + closest_shipyard_id)
             dirX, dirY = self.Shipyards[closest_shipyard_id]['dirX'], self.Shipyards[closest_shipyard_id]['dirY']
-            # moves_to_shipyard = self.Shipyards[closest_shipyard_id]['moves']
-
             closest_shipyard_encouragement = 10 * (self.ship_cargo + 10)
-            
-            log('   adding ' + str(closest_shipyard_encouragement) + ' to ' + dirX + ' and ' + dirY)
-            
-            self.weights[dirX] += closest_shipyard_encouragement
-            self.weights[dirY] += closest_shipyard_encouragement
+
+            self.add_accordingly(dirX, dirY, closest_shipyard_encouragement)
 
     
     def shipyard_status(self):
@@ -436,42 +440,44 @@ class Locator:
 import random
 
 def determine_directions(point1, point2, size=21):
-        """ Given two points determine the closest directions to take to get to the point. """
-        x1, y1 = point1.x, point1.y
-        x2, y2 = point2.x, point2.y
+    """ Given two points determine the closest directions to take to get to the point. """
+    x1, y1 = point1.x, point1.y
+    x2, y2 = point2.x, point2.y
 
-         # For both x and y they are two type of paths to take
-        diff_x_1 = abs(x2 - x1) 
-        diff_x_2 = abs(size - x2 + x1)
-        diff_y_1 = abs(y2 - y1)
-        diff_y_2 = abs(size - y2 + y1)
+    # For both x and y they are two type of paths to take
+    diff_x_1 = abs(x2 - x1) 
+    diff_x_2 = abs(size - x2 + x1)
+    diff_y_1 = abs(y2 - y1)
+    diff_y_2 = abs(size - y2 + y1)
         # Given that x1=x2 or y1=y2 then return None, so we know 
         # no movement was needed in that axis.
-        best_x, best_y = 'None', 'None'
+    best_x, best_y = 'None', 'None'
 
-        if diff_x_1 > diff_x_2:
-            if x2 - x1 > 0: 
-                best_x = "E"
-            else:
-                best_x = "W"
+    if diff_x_1 > diff_x_2:
+        if x2 - x1 > 0: 
+            best_x = "E"
         else:
-            if x2 - x1 > 0: 
-                best_x = "W"
-            else:
-                best_x = "E"
+            best_x = "W"
+    else:
+        if x2 - x1 > 0: 
+            best_x = "W"
+        else:
+            best_x = "E"
 
-        if diff_y_1 > diff_y_2:
-            if y2 - y1 > 0:
+    if diff_y_1 > diff_y_2:
+        if y2 - y1 > 0:
                 best_y = "N"
-            else:
-                best_y = "S"
         else:
-            if y2 - y1 > 0:
-                best_y = "S"
-            else:
-                best_y = "N"
+            best_y = "S"
+    else:
+        if y2 - y1 > 0:
+            best_y = "S"
+        else:
+            best_y = "N"
+
+    # NUmber
         
-        return best_x, best_y
+    return best_x, best_y    
 
 
 def grid(cell):
