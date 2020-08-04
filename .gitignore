@@ -11,3 +11,5 @@ halite-sdk-overview.ipynb
 submission.py
 halite-template-bot.ipynb
 kaggle_environments/
+.idea/
+vnv/
