@@ -9,19 +9,19 @@ rule in the weightings the values will be used to weight would be between -10 to
 problem will be counted towards the optimal goal.
 
 They are different aspect to this agent:
-1. If the shipyards need protection: go through the all of the shipyards surroundings and weight the directions to take in order to save them
+1. If the shipyards need protection: go through the all of the shipyards surroundings and weight the directions to take 
+   in order to save them
 2. Automatically avoid my own ships to both avoid collision and distribute throughout the map
-3. Distance to a cell, halite in a cell, presence of a ship(it's cargo), presence of a shipyard are the main factors in the decesion process which are evaludated differently in various situations.
+3. Distance to a cell, halite in a cell, presence of a ship(it's cargo), presence of a shipyard are the main factors in 
+   the decision process which are evaluated differently in various situations.
 
 Try to figure out how does the previous algorithm work so well
 
 # Implement: 
-    - A set of testing environments to see how the algorithm would react: run a series of command on all of the ships and shipyard to make them orient in a certain way.
-	- Write debug logs for every single possible place to check for messed up parts and also track the flow of weighting and fine-tune the process.
     - it is exhaustive to try to reduce the weights so they won't be chosen, instead manually eliminate moves. 
-    - Pass the dir and count the number of repitions of direction
+    - Pass the dir and count the number of repetitions of direction
+
 # Fixes: 
-    - take account for times when the dir is 'none'
     - There should be an extra stress when a given cell is full of halite
     - Also, the weight for convert should be high
     - Some shipyards don't have either a vertical or horizontal difference so don't add that
