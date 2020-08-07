@@ -210,7 +210,7 @@ def log(text, step=1):
             text = str(text) + '\n'
             text_file.write(text)
 
-log('logs:', 1)
+# log('logs:', 1)
 
 def agent(obs, config):
     # Make the board
@@ -221,10 +221,10 @@ def agent(obs, config):
     me = board.current_player # Player Object
     
     new_board = Board(obs,config)
-    log('-----------------------------------------------------------------')
-    log(step + 1)
+    # log('-----------------------------------------------------------------')
+    # log(step + 1)
     for ship in me.ships:
-        log('ship-id:' + ship.id + ', pos:' + str(ship.position) + ', cargo: ' + str(ship.halite))
+        # log('ship-id:' + ship.id + ', pos:' + str(ship.position) + ', cargo: ' + str(ship.halite))
 #         decider = Decesion_Ship(new_board, ship, step)
         decider = Decesion_Ship(new_board, new_board.ships[ship.id], step)
         ship.next_action = decider.determine()
