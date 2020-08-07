@@ -20,9 +20,21 @@ Try to figure out how does the previous algorithm work so well
 # Implement: 
     - it is exhaustive to try to reduce the weights so they won't be chosen, instead manually eliminate moves. 
     - Pass the dir and count the number of repetitions of direction
+    - The ShipYardDecision class and use it
+    - For better accuracy extend the reach to 10 moves apart
+    - *Come up with tags so when being followed to go after halite
+    - Regulate conversion since we don't need two yards beside each other
+    - Add more moves to agent_a
+    - Add all the new stuff then start playing around with them
+    - Keep the additions simple for now without exponents
+    - Go through all the shipyards and add/subtract given there is an enemy or my  own ships
+
 
 # Fixes: 
     - There should be an extra stress when a given cell is full of halite
     - Also, the weight for convert should be high
     - Some shipyards don't have either a vertical or horizontal difference so don't add that
     - Also, if there was a (mine) shipyard and ship on a cell don't go there
+    - Should not convert where it has a lot of halite
+    - One of the reasons I am having trouble is the methods are not consistent and I need to write
+    the ShipYardDecision module and also work on the conversion issue.
