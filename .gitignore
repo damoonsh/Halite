@@ -13,3 +13,4 @@ halite-template-bot.ipynb
 kaggle_environments/
 .idea/
 vnv/
+__pycache__/
