@@ -140,14 +140,14 @@ class DecisionShip:
 
         # The correlation of the mining with cell's halite
         mining_encouragement = self.current_cell.halite
-        self.weights['mine'] += mining_encouragement ** 2
+        self.weights['mine'] += mining_encouragement ** 1.5
         log('  Mining-enc: ' + str(mining_encouragement))
 
         # Weight the CONVERT option
         self.weight_convert()
         # self.shipyard_status()
 
-    def add_accordingly(self, value):
+    def add_accordingly(self, value, title=""):
         """ Adds a value to a weight according to the relative distance. """
         # Get the repetition of each one letter direction
         rep_X: int = self.grid[self.current_direction]['movesX']
@@ -158,7 +158,7 @@ class DecisionShip:
         weightX = self.grid[self.current_direction]['weightX']
         weightY = self.grid[self.current_direction]['weightY']
 
-        if value !=0: log('    dir:' +self.current_direction + ', adding ' + str(round(value, 3)) + ' to ' + dirX + ', moves: ' + str(
+        if value !=0: log('   '+ title +' dir:' +self.current_direction + ', adding ' + str(round(value, 3)) + ' to ' + dirX + ', moves: ' + str(
             rep_X) + ' and ' + dirY + ", moves: " + str(rep_Y))
 
         if weightX != 0: self.weights[dirX] += value * weightX
@@ -351,21 +351,66 @@ class DecisionShip:
 
 
 class ShipyardDecisions:
-    def __init__(self, board: Board, shipyards):
+    def __init__(self, board: Board, player):
         """
             Decides the Shipyard's next action based on the given parameters
             board: The board that we will be observing
             shipyards: All the shipyards that the player has
         """
         self.board = board
-        self.Shipyards = shipyards
+        self.step = board.observation['step']
+        self.Shipyards = player.shipyards
+        self.shipyard_tendencies = {}
 
     def determine(self):
-        pass
+        """ Determines which shipyards should SPAWN, returns a dictionary of id: 'SPAWN' """
+        self.weight_shipyard_tendencies()
+        sorted_weights = {k: v for k, v in sorted(self.shipyard_tendencies.items(), key=lambda item: item[1], reverse=True)}
+        print(sorted_weights)
+        shipyard_ids = []
+
+        for shipyard_id, tendency in sorted_weights.items():
+            if tendency > -10:
+                shipyard_ids.append(shipyard_id)
+
+        return shipyard_ids
 
     def weight_shipyard_tendencies(self):
+        """ Iterates through the shipyards and weights their tendencies. """
         for shipyard in self.Shipyards:
-            pass
+            # Given that there are no ships on the shipyard we will weight the ship's tendency
+            if shipyard.cell.ship is None:
+                grid = Locator(self.board, shipyard).generate_grid_df()
+                weight = self.weight(grid)
+
+                self.shipyard_tendencies[shipyard.id] = weight
+
+    def weight(self, grid) -> float:
+        """
+            The weighting system is rather simple:
+                - If there was an enemy ship add to the weight
+                - If there was one of my own ships, then subtract from the weight
+            Take the distance of the ship into acount
+        """
+        # Base case: if I had no ships the spawn
+        if len(self.board.current_player.ships) == 0: return 100
+        value = 0
+        # Iteraing through the grid
+        for direction in grid.columns:
+            # print(pd.isna(grid[direction].ship_id))
+            if not pd.isna(grid[direction].ship_id):
+                if grid[direction].my_ship == 1:
+                    # ship_cargo: direct, distance: indirect
+                    value -= 100 / grid[direction]['moves']
+                else:
+                    # Ship_cargo: direct, distance: indirect
+                    value += 1000 / grid[direction]['moves']
+                    
+            if not pd.isna(grid[direction].shipyard_id):
+                if grid[direction].my_shipyard == 0:
+                    value += 200 / grid[direction]['moves']
+
+        return value
 
 
 class Locator:
@@ -383,9 +428,13 @@ class Locator:
 
         for ship_id, ship in self.board.ships.items():
             base_info = {"my_ship": 0, "moves": 0, "position": (ship.position.x, ship.position.y),
-                         'cargo': ship.cell.halite, 'moves': count_moves(self.ship.position, ship.position),
+                         'cargo': ship.cell.halite,
                          'dirX': (determine_directions(self.ship_position, ship.position))[0],
                          'dirY': (determine_directions(self.ship_position, ship.position))[1]}
+
+            base_info['movesX'] = min(abs(self.ship_position.x - ship.position.x), abs(21 - self.ship_position.x + ship.position.x))
+            base_info['movesY'] = min(abs(self.ship_position.y - ship.position.y), abs(21 - self.ship_position.y + ship.position.y))
+            base_info['moves'] = base_info['movesX'] + base_info['movesY']
 
             if ship_id in self.board.current_player.ship_ids and ship.id != self.ship.id:
                 base_info['my_ship'] = 1
@@ -404,8 +453,11 @@ class Locator:
                          "position": (shipyard.position.x, shipyard.position.y),
                          'dirX': (determine_directions(self.ship_position, shipyard.position))[0],
                          'dirY': (determine_directions(self.ship_position, shipyard.position))[1],
-                         'player_halite': shipyard.player.halite,
-                         'moves': count_moves(self.ship.position, shipyard.position)}
+                         'player_halite': shipyard.player.halite}
+
+            base_info['movesX'] = min(abs(self.ship_position.x - ship.position.x), abs(21 - self.ship_position.x + ship.position.x))
+            base_info['movesY'] = min(abs(self.ship_position.y - ship.position.y), abs(21 - self.ship_position.y + ship.position.y))
+            base_info['moves'] = base_info['movesX'] + base_info['movesY']
 
             if shipyard_id in self.board.current_player.shipyard_ids:
                 base_info['my_shipyard'] = 1
@@ -416,13 +468,12 @@ class Locator:
         return pd.DataFrame(shipyards_info)
 
     def generate_grid_df(self):
-        """ Generates a Dataframe describing the information of objects and cells in the 5x5 grid of the ship. """
+        """ Generates a Dataframe describing the information of objects and cells in the grid of the ship. """
         all_dirs = {}
 
         total_moves = len(self.grid) / 4
-
+        
         for direction, cell in self.grid.items():
-            weight = (total_moves - len(direction)) / (total_moves * len(direction)) 
 
             base_info = {
                 "ship_id": None, "shipyard_id": None,
@@ -430,7 +481,7 @@ class Locator:
                 "halite": 0, "moves": 0,
                 "movesX": 0, "movesY": 0,
                 "dirY": 'None', "dirX": 'None',
-                'weight': weight
+                'weightX': 0, 'weightY': 0
             }
 
             if "N" in  direction:
@@ -446,6 +497,13 @@ class Locator:
             elif "E" in  direction:
                 base_info['dirX'] = 'E'
                 base_info['movesX'] = direction.count("E")
+
+            if base_info['dirY'] != 'None':
+                base_info['weightY'] = (total_moves - base_info['movesY']) / (base_info['movesY'] * total_moves)
+            
+            if base_info['dirX'] != 'None':
+                base_info['weightX'] = (total_moves - base_info['movesX']) / (base_info['movesX'] * total_moves)
+
 
             if cell.ship is not None:
                 base_info["ship_id"] = cell.ship.id
@@ -464,7 +522,6 @@ class Locator:
             all_dirs[direction] = base_info
 
         return pd.DataFrame(all_dirs)
-
 
 ####################
 # Helper Functions #
@@ -556,28 +613,6 @@ def grid(cell):
     }
 
 
-def count_moves(point1, point2, size=21):
-    """ 
-        Returns the minimum number of between moves to go from point1 to point2.
-    """
-    # Break the points into coordinates
-    x1, y1 = point1.x, point1.y
-    x2, y2 = point2.x, point2.y
-
-    # For both x and y they are two type of paths to take
-    diff_x_1 = abs(x2 - x1)
-    diff_x_2 = abs(size + x2 - x1)
-    diff_y_1 = abs(y2 - y1)
-    diff_y_2 = abs(size + y2 - y1)
-
-    opt1 = diff_x_1 + diff_y_1
-    opt2 = diff_x_1 + diff_y_2
-    opt3 = diff_x_2 + diff_y_1
-    opt4 = diff_x_2 + diff_y_2
-
-    return min(opt1, opt2, opt3, opt4)
-
-
 def log(text, step=1):
     if step == 0:
         with open("log.txt", "w") as text_file:
@@ -613,18 +648,25 @@ def agent(obs, config):
             ship.next_action = decider.determine()
 
             new_board = board.next()
-        log('#########')
-    for shipyard in me.shipyards:
-        # If there were no ships on the yard
-        if new_board.shipyards[shipyard.id].cell.ship is None and step < 392:
-            if len(me.ships) == 0:
-                shipyard.next_action = ShipyardAction.SPAWN
+    #     log('#########')
+    # for shipyard in me.shipyards:
+    #     # If there were no ships on the yard
+    #     if new_board.shipyards[shipyard.id].cell.ship is None:
+    #         if len(me.ships) == 0:
+    #             shipyard.next_action = ShipyardAction.SPAWN
 
-            if step % 3 == 1:
-                shipyard.next_action = ShipyardAction.SPAWN
+    #         if step % 3 == 1:
+    #             shipyard.next_action = ShipyardAction.SPAWN
 
-            if step > 200 and me.halite > 10000 + len(me.ships) * 1000:
-                shipyard.next_action = ShipyardAction.SPAWN
+    #         if step > 200 and me.halite > 10000 + len(me.ships) * 1000:
+    #             shipyard.next_action = ShipyardAction.SPAWN
+        shipyard_ids = ShipyardDecisions(board, me).determine()
+
+        for shipyard_id in shipyard_ids:
+            board.shipyards[shipyard_id] = ShipyardAction.SPAWN
+        # After implementing the decision process for shipyards, we will need to 
+        # add the next action for each of them individually
+
 
         new_board = board.next()
 
