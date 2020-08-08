@@ -15,19 +15,16 @@ They are different aspect to this agent:
 3. Distance to a cell, halite in a cell, presence of a ship(it's cargo), presence of a shipyard are the main factors in 
    the decision process which are evaluated differently in various situations.
 
-Try to figure out how does the previous algorithm work so well
+- Take notes and apply them all.
 
 # Implement: 
-    - it is exhaustive to try to reduce the weights so they won't be chosen, instead manually eliminate moves. 
-    - Pass the dir and count the number of repetitions of direction
-    - The ShipYardDecision class and use it
     - For better accuracy extend the reach to 10 moves apart
     - *Come up with tags so when being followed to go after halite
     - Regulate conversion since we don't need two yards beside each other
-    - Add more moves to agent_a
     - Add all the new stuff then start playing around with them
     - Keep the additions simple for now without exponents
     - Go through all the shipyards and add/subtract given there is an enemy or my  own ships
+    - Increase tendency to deposit as the steps increase
 
 
 # Fixes: 
@@ -38,3 +35,5 @@ Try to figure out how does the previous algorithm work so well
     - Should not convert where it has a lot of halite
     - One of the reasons I am having trouble is the methods are not consistent and I need to write
     the ShipYardDecision module and also work on the conversion issue.
+    - Make the ships get far from the shipyard at the beginning steps so they would convert.
+    - Easily crashes with other ships
