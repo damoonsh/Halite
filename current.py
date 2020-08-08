@@ -1,4 +1,4 @@
-from kaggle_environments.envs.halite.helpers import Point, Board, ShipAction, ShipyardAction
+from kaggle_environments.envs.halite.helpers import Board, ShipAction, ShipyardAction
 import pandas as pd
 
 
@@ -66,7 +66,7 @@ class DecisionShip:
         # If none were chosen, then just return the default move which is mining
         return self.next_move
 
-    def add_accordingly(self, value, title=""):
+    def add_accordingly(self, value, title="", loging=True):
         """ Adds a value to directions according to their corresponding weights """
         # Get the repetition of each one letter direction
         rep_X: int = self.grid[self.current_direction]['movesX']
@@ -77,8 +77,8 @@ class DecisionShip:
         weightX = self.grid[self.current_direction]['weightX']
         weightY = self.grid[self.current_direction]['weightY']
 
-        if value != 0:
-            log('   ' + title + ' dir:' + self.current_direction + ', adding ' + str(round(value, 3)) + ' to ' + dirX + ', moves: ' + str(rep_X) + ' and ' + dirY + ", moves: " + str(rep_Y))
+        if value != 0 and loging:
+            log('   ' + title + ' ' + self.current_direction + ', adding ' + str(round(value, 3)) + ' to ' + dirX + ', moves: ' + str(rep_X) + ' and ' + dirY + ", moves: " + str(rep_Y))
 
         if weightX != 0:
             self.weights[dirX] += value * weightX
@@ -99,10 +99,10 @@ class DecisionShip:
         if no_shipyards:
             self.weights['convert'] = 4000
         elif not on_shipyard and self.Shipyards[self.closest_shipyard_id]['moves'] > 2:
-            if ((end_of_game_conversion and threshhold_reach)):
+            if (end_of_game_conversion and threshhold_reach):
                 self.weights['convert'] = 3000 * (self.step // 10 + 1)
             else:
-                self.weights['convert'] = (self.ship_cargo - threshold) / (self.step // 250 + 1)
+                self.weights['convert'] = (self.ship_cargo - threshold) * 30
         else:
             self.weights['convert'] = -1000
 
@@ -148,7 +148,8 @@ class DecisionShip:
                         self.eliminated_moves.append(direction)
                         self.eliminated_moves.append('mine')
                         # Go to the closest shipyard preferably
-                        self.go_to_closest_shipyard(self.ship_cargo * 5)
+
+                        self.go_to_closest_shipyard(self.ship_cargo ** 2)
                     else:
                         self.deal_enemy_ship(Ship_id)
 
@@ -161,15 +162,15 @@ class DecisionShip:
 
             # 2. Trigger movement in the main four direction solely based on the amount of halite each cell has
             main_dir_encourage = self.grid[direction].halite
-            self.add_accordingly(main_dir_encourage, title='  main4: ')
+            self.add_accordingly(main_dir_encourage, title='  main4: ',  loging=False)
 
             # 3. Either encourage mining or discourage it by adding the difference between cells to the mine
             mining_trigger = (self.current_cell.halite - self.grid[direction].halite) / self.grid[direction].moves
             self.weights['mine'] += mining_trigger
 
         # The correlation of the mining with cell's halite
-        self.weights['mine'] += self.current_cell.halite ** 1.7
-        log('  Mining-enc: ' + str(self.current_cell.halite ** 1.7))
+        self.weights['mine'] += self.current_cell.halite * 10
+        log('  Mining-enc: ' + str(self.current_cell.halite * 10))
 
         # Weight the CONVERT option
         self.weight_convert()
@@ -180,7 +181,7 @@ class DecisionShip:
     def avoid_self_colision(self, ship_id):
         """ This function is called to avoid lower the tendency for cell with my own ships. """
         # Given that they are not one move apart the discouragement should not be that strong
-        discourage_collision = -1 * abs(self.ship_cargo - self.Ships[ship_id].cargo)
+        discourage_collision = -10 * abs(self.ship_cargo - self.Ships[ship_id].cargo)
 
         self.add_accordingly(discourage_collision, title='Avoid-collision')
 
@@ -199,7 +200,7 @@ class DecisionShip:
 
     def attack_enemy_ship(self, diff):
         """ This function encourages attacking the enemy ship """
-        attack_encouragement = 10 * diff
+        attack_encouragement = 8 * diff
         self.add_accordingly(attack_encouragement, title='Attacking-Enemy-Ship')
 
     def get_away(self):
@@ -209,7 +210,7 @@ class DecisionShip:
         self.add_accordingly(direction_discouragement, title='Get-Away')
 
         # 2. Encouraging going to the closest shipyard
-        closest_shipyard_encouragement = 10 * self.ship_cargo
+        closest_shipyard_encouragement = 8 * self.ship_cargo
         self.go_to_closest_shipyard(closest_shipyard_encouragement)
 
     def deposit(self):
@@ -223,9 +224,11 @@ class DecisionShip:
         shipyard = self.board.shipyards[shipyard_id]
         num_enemy_shipyards = len(shipyard.player.shipyards)
 
+        # If the shipyard's distance to its nearest shipyard was less than 7 then destroy it.
+
         attacking_enemy_shipyard_tendency = (shipyard.player.halite / 1000 + 0.5) / (num_enemy_shipyards + 0.5)
 
-        self.add_accordingly(attacking_enemy_shipyard_tendency, title='Attacking-Enemy-Shipyard')
+        self.add_accordingly(attacking_enemy_shipyard_tendency, title='Attacking-Enemy-Shipyard', loging=False)
 
     def go_to_closest_shipyard(self, value):
         """ Encourage movement towards the nearest shipyard """
@@ -248,28 +251,26 @@ class DecisionShip:
         """ Checks to see if a given shipyard needs protection or not? """
         shipyard = self.board.shipyards[shipyard_id]
 
+        dirX, dirY = self.Shipyards[shipyard_id]['dirX'], self.Shipyards[shipyard_id]['dirY']
+        
         log('  Shipyard status:' + shipyard.id)
 
         shipyard_grid = Locator(self.board, shipyard).generate_grid_df()
 
         for direction in list(shipyard_grid.columns):
             ship_id = shipyard_grid[direction].ship_id
-            # IF there is a ship on that cell
+            # If there is a ship on that cell
             if not pd.isna(ship_id):
-                dirX, dirY = shipyard_grid['dirX'], shipyard_grid['dirY']
-                movesX, movesY = shipyard_grid['movesX'], shipyard_grid['movesY']
-                weightsX, weightsY = shipyard_grid['weightX'], shipyard_grid['weightY']
-
                 if shipyard_grid[direction].my_ship == 1:
-                    my_ship_weight = -2 * self.ship_cargo
-                    self.weights[dirX] = my_ship_weight * weightX
-                    self.weights[dirY] = my_ship_weight * weightsY
-                    log('    my ship, adding: ' + str(round(my_ship_weight, 3)) + ' to ' + dirX + ', moves: ' + weightX + ', and :' + dirY + ', moves: ' + weightY)
+                    my_ship_weight = -100 / ((self.ship_cargo + 5) * shipyard_grid[direction]['moves'])
+                    self.weights[dirX] += my_ship_weight
+                    self.weights[dirY] += my_ship_weight
+                    if self.step > 100 and self.step < 110: log('    my ship, adding: ' + str(round(my_ship_weight, 3)) + ' to ' + dirX + ' and ' + dirY)
                 else:
-                    enemy_ship_weight = 3 * self.ship_cargo
-                    self.weights[dirX] = enemy_ship_weight * weightX
-                    self.weights[dirY] = enemy_ship_weight * weightsY
-                    log('    enemy ship, adding' + str(round(enemy_ship_weight, 3)) + ' to ' + dirX + ', moves: ' + weightX + ', and :' + dirY + ', moves: ' + weightY)
+                    enemy_ship_weight = 300 / ((self.ship_cargo + 5) * shipyard_grid[direction]['moves'])
+                    self.weights[dirX] += enemy_ship_weight
+                    self.weights[dirY] += enemy_ship_weight
+                    if self.step > 100 and self.step < 110: log('    en ship, adding: ' + str(round(enemy_ship_weight, 3)) + ' to ' + dirX + ' and ' + dirY)
 
     def closest_shipyard(self):
         """ This function will return the distance to the closest shipyard's id. """
@@ -301,7 +302,7 @@ class DecisionShip:
     def apply_elimination(self):
         """ Eliminates the moves to be eliminated. """
         for move in self.eliminated_moves:
-            log('  Eliminating ' + move)
+            # log('  Eliminating ' + move)
             if move in self.weights.keys():
                 del self.weights[move]
 
@@ -335,7 +336,7 @@ class ShipyardDecisions:
                           sorted(self.shipyard_tendencies.items(), key=lambda item: item[1], reverse=True)}
         shipyard_ids = []
         for shipyard_id, tendency in sorted_weights.items():
-            if tendency > -10:
+            if tendency > -10 and self.player_halite > 1000:
                 shipyard_ids.append(shipyard_id)
 
         log('Shipyards: ' + str(shipyard_ids))
@@ -471,10 +472,10 @@ class Locator:
                 base_info['movesX'] = direction.count("E")
 
             if base_info['dirY'] != 'None':
-                base_info['weightY'] = (total_moves - base_info['movesY']) / (base_info['movesY'] * total_moves)
+                base_info['weightY'] = round((total_moves - base_info['movesY']) / (base_info['movesY'] * total_moves), 3)
 
             if base_info['dirX'] != 'None':
-                base_info['weightX'] = (total_moves - base_info['movesX']) / (base_info['movesX'] * total_moves)
+                base_info['weightX'] = round((total_moves - base_info['movesX']) / (base_info['movesX'] * total_moves), 3)
 
             if cell.ship is not None:
                 base_info["ship_id"] = cell.ship.id
@@ -577,9 +578,25 @@ def grid(cell):
         'WWWWWN': w5.north, 'WWWWWS': w5.south, 'EEEEEN': e5.north, 'EEEEES': e5.south,
         'SSSSSE': s5.east, 'SSSSSW': s5.west, 'NNNNNW': n5.west, 'NNNNNE': n5.east,
         'WWWWNN': w4.north.north, 'WWWWSS': w4.south.south, 'EEEENN': e4.north.north, 'EEEESS': e4.south.south,
-        'EEENNN': e3.north.north.north, 'EEESSS': e3.south.south.south, 'WWWNNN': w3.north.north.north,
-        'WWWSSS': w3.south.south.south,
-        'NNNNEE': n4.east.east, 'NNNNWW': n4.west.west, 'SSSSWW': s4.west.west, 'SSSSEE': s4.east.east
+        'NNNNEE': n4.east.east, 'NNNNWW': n4.west.west, 'SSSSWW': s4.west.west, 'SSSSEE': s4.east.east,
+        'EEENNN': e3.north.north.north, 'EEESSS': e3.south.south.south, 'WWWNNN': w3.north.north.north, 'WWWSSS': w3.south.south.south,
+        # 7 moves away
+        'SSSSSSS': s7, 'NNNNNNN': n7, 'WWWWWWW': w7, 'EEEEEEE': e7,
+        'WWWWWWN': w6.north, 'WWWWWWS': w6.south, 'EEEEEEN': e6.north, 'EEEEEES': e6.south,
+        'SSSSSSE': s6.east, 'SSSSSSW': s6.west, 'NNNNNNW': n6.west, 'NNNNNNE': n6.east,
+        'WWWWWNN': w5.north.north, 'WWWWWSS': w5.south.south, 'EEEEENN': e5.north.north, 'EEEEESS': e5.south.south,
+        'NNNNNWW': n5.west.west, 'NNNNNEE': n5.east.east, 'SSSSSWW': s5.west.west, 'SSSSSEE': s5.east.east,
+        'EEEENNN': e4.north.north.north, 'EEEESSS': e4.south.south.south, 'WWWWNNN': w4.north.north.north, 'WWWWSSS': w4.south.south.south,
+        'NNNNEEE': n4.east.east.east, 'NNNNWWW': n4.west.west.west, 'SSSSWWW': s4.west.west.west, 'SSSSEEE': s4.east.east.east,
+        # 8 moves away
+        'SSSSSSSS': s8, 'NNNNNNNN': n8, 'WWWWWWWW': w8, 'EEEEEEEE': e8,
+        'WWWWWWWN': w7.north, 'WWWWWWWS': w7.south, 'EEEEEEEN': e7.north, 'EEEEEEES': e7.south,
+        'SSSSSSSE': s7.east, 'SSSSSSSW': s7.west, 'NNNNNNNW': n7.west, 'NNNNNNNE': n7.east,
+        'NNNNNNNE': n6.east, 'NNNNNNNW': n6.west, 'SSSSSSSE': s6.east, 'SSSSSSSW': s6.west,
+        'WWWWWWWN': w6.north, 'WWWWWWWS': w6.south, 'EEEEEEEN': e6.north, 'EEEEEEES': e6.south,
+        'NNNNNWWW': n5.west.west.west, 'NNNNNEEE': n5.east.east.east, 'SSSSSWWW': s5.west.west.west, 'SSSSSEEE':  s5.east.east.east,
+        'EEEEENNN': e5.north.north.north, 'EEEEESS': e5.south.south.south, 'WWWWWNNN': w5.north.north.north, 'WWWWWSSS': w5.south.south.south,
+        'EEEENNNN': e4.north.north.north.north, 'WWWWNNNN': w4.north.north.north.north, 'EEEESSSS': e4.south.south.south.south, 'WWWWSSSS': w4.south.south.south.south
     }
 
 
