@@ -14,12 +14,11 @@ class DecisionShip:
     """
 
     def __init__(self, board: Board, ship):
-        # Given values
         self.board = board
         self.ship = ship
 
         # Some usefull properties
-        self.player = self.board.current_player  # Player
+        self.player = self.board.current_player
         self.ship_cargo = ship.halite
         self.current_cell = ship.cell
         self.current_position = ship.position
@@ -28,7 +27,8 @@ class DecisionShip:
         # All moves ship can take
         self.moves = {"N": ShipAction.NORTH, 'S': ShipAction.SOUTH, 'W': ShipAction.WEST,
                       'E': ShipAction.EAST, 'convert': ShipAction.CONVERT, 'mine': None}
-        # The set of moves that should not be taken
+
+        # The list of moves that should not be taken
         self.eliminated_moves = ['None']
 
         # Weights of different moves
@@ -39,7 +39,7 @@ class DecisionShip:
         self.Ships = self.locator.get_ship_info()
         self.Shipyards = self.locator.get_shipyard_info()
         self.grid = self.locator.generate_grid_df()
-        self.closest_shipyard_id =  self.closest_shipyard()
+        self.closest_shipyard_id = self.closest_shipyard()
 
         # Default move which is set to mining (None)
         self.next_move = None
@@ -49,8 +49,7 @@ class DecisionShip:
 
     def determine(self):
         """ Returns the next action decided for the ship based on the observations that have been made. """
-        # Get the weights for main four directions
-        self.weight_moves()
+        self.weight_moves()  # Calculate the weights for main four directions
         self.round()  # Round the weights
         self.apply_elimination()  # Apply the eliminations
 
@@ -66,6 +65,46 @@ class DecisionShip:
 
         # If none were chosen, then just return the default move which is mining
         return self.next_move
+
+    def add_accordingly(self, value, title=""):
+        """ Adds a value to directions according to their corresponding weights """
+        # Get the repetition of each one letter direction
+        rep_X: int = self.grid[self.current_direction]['movesX']
+        rep_Y: int = self.grid[self.current_direction]['movesY']
+        dirX = self.grid[self.current_direction]['dirX']
+        dirY = self.grid[self.current_direction]['dirY']
+
+        weightX = self.grid[self.current_direction]['weightX']
+        weightY = self.grid[self.current_direction]['weightY']
+
+        if value != 0:
+            log('   ' + title + ' dir:' + self.current_direction + ', adding ' + str(round(value, 3)) + ' to ' + dirX + ', moves: ' + str(rep_X) + ' and ' + dirY + ", moves: " + str(rep_Y))
+
+        if weightX != 0:
+            self.weights[dirX] += value * weightX
+        if weightY != 0:
+            self.weights[dirY] += value * weightY
+
+    def weight_convert(self, threshold=1500):
+        """ Weights the option for ship convertion. """
+        # 1. If they are no shipyards left
+        no_shipyards = len(self.player.shipyards) == 0
+        # 2. If it is the end of the game and we have more than 500 halite in our cargo
+        end_of_game_conversion = (self.step > 396 or self.near_end()) and self.ship.halite >= 500
+        # 3. There will be a threshold for the amount of cargo any ship could have
+        threshhold_reach = self.ship.halite > threshold
+        # 4. On shipyard already
+        on_shipyard = self.ship.cell.shipyard is not None
+
+        if no_shipyards:
+            self.weights['convert'] = 4000
+        elif not on_shipyard and self.Shipyards[self.closest_shipyard_id]['moves'] > 2:
+            if ((end_of_game_conversion and threshhold_reach)):
+                self.weights['convert'] = 3000 * (self.step // 10 + 1)
+            else:
+                self.weights['convert'] = (self.ship_cargo - threshold) / (self.step // 250 + 1)
+        else:
+            self.weights['convert'] = -1000
 
     def weight_moves(self):
         """ 
@@ -86,125 +125,64 @@ class DecisionShip:
                 3. If there is one of my shipyards: possibly deposit or ignore, also check for protection
                 4. If there is an enemy shipyard: depending on the situation might attack it
         """
-        # list of all directions in 5 moves apart
-        dirs = list(self.grid.columns)
         # Iterate through different directions
-        for direction in dirs:
+        for direction in list(self.grid.columns):
             # Set the global direction to the one at hand
             self.current_direction = direction
 
-            # If there was a ship
-            if not pd.isna(self.grid[direction].ship_id):
+            # Get the ids just for the ease of use
+            Ship_id = self.grid[direction]['ship_id']
+            Shipyard_id = self.grid[direction]['shipyard_id']
+
+            # 1. Evaluate the moves based on other objects present in the map
+            # 1.1 If there was a ship
+            if not pd.isna(Ship_id):
                 # If it was my ship
                 if self.grid[direction].my_ship == 1:
-                    if self.Ships[self.grid[direction].ship_id]['moves'] == 1:
-                        self.eliminated_moves.append(direction)  # Just don't go there
+                    if self.Ships[Ship_id]['moves'] == 1:
+                        self.eliminated_moves.append(direction)
                     else:
-                        # Distribute the ships so they won't end up in the same place
-                        self.avoid_self_colision(self.grid[direction].ship_id)
+                        self.avoid_self_colision(Ship_id)
                 else:
-                    # If it was not my ship
-                    if self.Ships[self.grid[direction].ship_id]['moves'] == 1 and \
-                            self.Ships[self.grid[direction].ship_id]['cargo'] < self.ship_cargo:
-                        # If there was an enemy ship one move away with less halite then eliminate the move and don't mine
-                        log('  Enemy ship at ' + direction + ', No mining!')
+                    if self.Ships[Ship_id]['moves'] == 1 and self.Ships[Ship_id]['cargo'] < self.ship_cargo:
                         self.eliminated_moves.append(direction)
                         self.eliminated_moves.append('mine')
                         # Go to the closest shipyard preferably
-                        self.go_to_closest_shipyard(self.ship_cargo ** 2);
+                        self.go_to_closest_shipyard(self.ship_cargo * 5)
                     else:
-                        self.deal_enemy_ship(self.grid[direction].ship_id)
+                        self.deal_enemy_ship(Ship_id)
 
-            # If there was a shipyard
-            if not pd.isna(self.grid[direction].shipyard_id):
-                # If it was my shipyard
+            # 1.2 If there was a shipyard
+            if not pd.isna(Shipyard_id):
                 if self.grid[direction].my_shipyard == 1:
                     self.deposit()
                 else:
-                    # If it was not my shipyard
-                    self.attack_enemy_shipyard(self.grid[direction].shipyard_id)
+                    self.attack_enemy_shipyard(Shipyard_id)
 
-            # Consider the main four direction solely based on the halite amount
-            for main_dir in ["N", "S", "W", "E"]:
-                if main_dir in direction:
-                    moves_apart: float = direction.count(main_dir)
-                    main_dir_encourage: float = self.grid[direction].halite * (21 - moves_apart) / (moves_apart * 21)
-                    # log('    Adding direction: ' + main_dir + ', moves apart:' + str(moves_apart) + ', enc: ' + str(round(main_dir_encourage,3)))
-                    self.weights[main_dir] += main_dir_encourage
+            # 2. Trigger movement in the main four direction solely based on the amount of halite each cell has
+            main_dir_encourage = self.grid[direction].halite
+            self.add_accordingly(main_dir_encourage, title='  main4: ')
 
-            # In order to keep the mining as an option as well: the mining option will get add to only if amount of
-            # grid in the current cell is higher than other places
-            mining_trigger = round(
-                (self.current_cell.halite - self.grid[direction].halite) / self.grid[direction].moves, 3)
-            # log('    At the end of the directions adding ' +  str(mining_trigger) + ' to the mining weight.')
+            # 3. Either encourage mining or discourage it by adding the difference between cells to the mine
+            mining_trigger = (self.current_cell.halite - self.grid[direction].halite) / self.grid[direction].moves
             self.weights['mine'] += mining_trigger
 
         # The correlation of the mining with cell's halite
-        mining_encouragement = self.current_cell.halite
-        self.weights['mine'] += mining_encouragement ** 1.5
-        log('  Mining-enc: ' + str(mining_encouragement))
+        self.weights['mine'] += self.current_cell.halite ** 1.7
+        log('  Mining-enc: ' + str(self.current_cell.halite ** 1.7))
 
         # Weight the CONVERT option
         self.weight_convert()
-        # self.shipyard_status()
 
-    def add_accordingly(self, value, title=""):
-        """ Adds a value to a weight according to the relative distance. """
-        # Get the repetition of each one letter direction
-        rep_X: int = self.grid[self.current_direction]['movesX']
-        rep_Y: int = self.grid[self.current_direction]['movesY']
-        dirX = self.grid[self.current_direction]['dirX']
-        dirY = self.grid[self.current_direction]['dirY']
+        # See if any of the shipyards need defending
+        self.shipyard_status()
 
-        weightX = self.grid[self.current_direction]['weightX']
-        weightY = self.grid[self.current_direction]['weightY']
+    def avoid_self_colision(self, ship_id):
+        """ This function is called to avoid lower the tendency for cell with my own ships. """
+        # Given that they are not one move apart the discouragement should not be that strong
+        discourage_collision = -1 * abs(self.ship_cargo - self.Ships[ship_id].cargo)
 
-        if value !=0: log('   '+ title +' dir:' +self.current_direction + ', adding ' + str(round(value, 3)) + ' to ' + dirX + ', moves: ' + str(
-            rep_X) + ' and ' + dirY + ", moves: " + str(rep_Y))
-
-        if weightX != 0: self.weights[dirX] += value * weightX
-        if weightY != 0: self.weights[dirY] += value * weightY
-
-    def weight_convert(self, threshold=1500):
-        """ Weights the option for ship convertion. """
-        # 1. If they are no shipyards left
-        no_shipyards = len(self.player.shipyards) == 0
-        # 2. If it is the end of the game and we have more than 500 halite in our cargo
-        end_of_game_conversion = (self.step > 396 or self.near_end()) and self.ship.halite >= 500
-        # 3. There will be a threshold for the amount of cargo any ship could have
-        threshhold_reach = self.ship.halite > threshold
-        # 4. On shipyard already
-        on_shipyard = self.ship.cell.shipyard is not None
-
-        if no_shipyards:
-            self.weights['convert'] = 4000
-        # Don't convert if the there is shipyard of mine 2 moves away and then cell does not already have a shipyard
-        elif not on_shipyard and self.Shipyards[self.closest_shipyard_id]['moves'] > 2:
-            if ((end_of_game_conversion and threshhold_reach)):
-                self.weights['convert'] = 3000 * (self.step // 10 + 1)
-            else:
-                self.weights['convert'] = (self.ship_cargo - 1000) / (self.step // 50 + 1)
-        else:
-            self.weights['convert'] = -1000
-
-    def deposit(self):
-        """ Weights the tendency to deposit and adds to the directions which lead to the given shipyard. """
-        log('  Deposit:') # logging
-        # measure tendency
-        deposit_tendency = 10 * self.ship_cargo * (self.step / 200)
-        self.add_accordingly(deposit_tendency)
-
-    def attack_enemy_shipyard(self, shipyard_id):
-        """ Weights the tendency to attack the enemy shipyard. """
-        # Get the shipyard's info
-        shipyard = self.board.shipyards[shipyard_id]
-        num_enemy_shipyards = len(shipyard.player.shipyards)
-
-        log('  Attacking enemy shipyard') # Logging
-
-        attacking_enemy_shipyard_tendency = (shipyard.player.halite + 0.5) / (num_enemy_shipyards + 0.5)
-
-        self.add_accordingly(attacking_enemy_shipyard_tendency)
+        self.add_accordingly(discourage_collision, title='Avoid-collision')
 
     def deal_enemy_ship(self, ship_id):
         """ 
@@ -213,53 +191,52 @@ class DecisionShip:
         """
         # The amount of cargo caried by the opponent's ship
         oppCargo = self.Ships[ship_id].cargo
-        log(' Dealing with enemy ship:') # Logging
-        # If the ship's cargo was more than enemy's cargo and it was not equal to zero then get away
+        # If the ship's cargo was more than enemy's cargo and it was not equal to zero then get away otherwise attack
         if self.ship_cargo >= oppCargo and self.ship_cargo != 0:
-            # If my ship's cargo was not less than enemy's
             self.get_away()
         else:
-            # If the ship had more halite then attack
             self.attack_enemy_ship(oppCargo - self.ship_cargo)
 
     def attack_enemy_ship(self, diff):
-        """ This function encourages attacking the enemy ship. """
-        # Get the ship's info
-        log('  Attacking enemy ship')
+        """ This function encourages attacking the enemy ship """
         attack_encouragement = 10 * diff
-
-        self.add_accordingly(attack_encouragement)
+        self.add_accordingly(attack_encouragement, title='Attacking-Enemy-Ship')
 
     def get_away(self):
-        """ 
-            This function is called when my ship has a possible change of getting followed by 
-            another enemy ship with lower halite.
-            
-            There can multiple options that given the parameters and the manual weightings one 
-            could have a higher value and hence tendency.
-        """
-        log('  Get away') # Logging
-
+        """ This function is called when my ship needs to get away from a ship which might be following it """
+        # 1. Directly discouraging the movement
         direction_discouragement = -10 * self.ship_cargo
-        self.add_accordingly(direction_discouragement)
+        self.add_accordingly(direction_discouragement, title='Get-Away')
 
-        # The weights for the closest shipyard goes up.
-        closest_shipyard_encouragement = 10 * self.ship_cargo 
+        # 2. Encouraging going to the closest shipyard
+        closest_shipyard_encouragement = 10 * self.ship_cargo
         self.go_to_closest_shipyard(closest_shipyard_encouragement)
+
+    def deposit(self):
+        """ Weights the tendency to deposit and adds to the directions which lead to the given shipyard """
+        deposit_tendency = 10 * self.ship_cargo * (self.step / 200)
+        self.add_accordingly(deposit_tendency, title='Deposit')
+
+    def attack_enemy_shipyard(self, shipyard_id):
+        """ Weights the tendency to attack the enemy shipyard. """
+        # Get the shipyard's info
+        shipyard = self.board.shipyards[shipyard_id]
+        num_enemy_shipyards = len(shipyard.player.shipyards)
+
+        attacking_enemy_shipyard_tendency = (shipyard.player.halite / 1000 + 0.5) / (num_enemy_shipyards + 0.5)
+
+        self.add_accordingly(attacking_enemy_shipyard_tendency, title='Attacking-Enemy-Shipyard')
 
     def go_to_closest_shipyard(self, value):
         """ Encourage movement towards the nearest shipyard """
-        # Get the id of the closest shipyard to the ship
-        closest_shipyard_id = self.closest_shipyard()
-        
-        # If there where any shipyards available then increase the tendency to get to them
-        if closest_shipyard_id != 0:
-            log('   closest_id: ' + closest_shipyard_id)
-            dirX, dirY = self.Shipyards[closest_shipyard_id]['dirX'], self.Shipyards[closest_shipyard_id]['dirY']
-            log('   adding ' + str(value) + ' to ' + dirX + ' and ' + dirY)
-
+        if self.closest_shipyard_id != 0:
+            dirX, dirY = self.Shipyards[self.closest_shipyard_id]['dirX'], self.Shipyards[self.closest_shipyard_id][
+                'dirY']
             self.weights[dirX] += value
             self.weights[dirY] += value
+
+            log('   closest_id: ' + self.closest_shipyard_id + ', adding ' + str(
+                value) + ' to ' + dirX + ' and ' + dirY)
 
     def shipyard_status(self):
         """ This function gives tendency to go to shipyards within the map. """
@@ -283,17 +260,16 @@ class DecisionShip:
                 movesX, movesY = shipyard_grid['movesX'], shipyard_grid['movesY']
                 weightsX, weightsY = shipyard_grid['weightX'], shipyard_grid['weightY']
 
-
                 if shipyard_grid[direction].my_ship == 1:
                     my_ship_weight = -2 * self.ship_cargo
                     self.weights[dirX] = my_ship_weight * weightX
                     self.weights[dirY] = my_ship_weight * weightsY
-                    log('    my ship, adding: ' + str(round(my_ship_weight),3) + ' to '+ dirX + ', moves: ' + weightX + ', and :' + dirY + ', moves: ' + weightY)
+                    log('    my ship, adding: ' + str(round(my_ship_weight, 3)) + ' to ' + dirX + ', moves: ' + weightX + ', and :' + dirY + ', moves: ' + weightY)
                 else:
                     enemy_ship_weight = 3 * self.ship_cargo
                     self.weights[dirX] = enemy_ship_weight * weightX
                     self.weights[dirY] = enemy_ship_weight * weightsY
-                    log('    enemy ship, adding'+ str(round(enemy_ship_weight),3) + ' to '+ dirX + ', moves: ' + weightX + ', and :' + dirY + ', moves: ' + weightY)
+                    log('    enemy ship, adding' + str(round(enemy_ship_weight, 3)) + ' to ' + dirX + ', moves: ' + weightX + ', and :' + dirY + ', moves: ' + weightY)
 
     def closest_shipyard(self):
         """ This function will return the distance to the closest shipyard's id. """
@@ -308,19 +284,6 @@ class DecisionShip:
                 shipyard_id = list(tMyShipyards[tMyShipyards['moves'] == min_val].T.columns)[0]
 
         return shipyard_id
-
-    def avoid_self_colision(self, ship_id):
-        """ This function is called to avoid lower the tendency for cell with my own ships. """
-        log('  Avoid Collision')
-
-        # Getting ship's info
-        oppShipCargo = self.Ships[ship_id].cargo
-        diff = abs(self.ship_cargo - oppShipCargo)
-
-        # Given that they are not one move apart the discouragement should not be that strong
-        discourage_collision = -1 * (diff + 3)
-        
-        self.add_accordingly(discourage_collision)
 
     def near_end(self):
         """ This function is intended to determine if the game is about to end so the ships with halite can
@@ -368,7 +331,8 @@ class ShipyardDecisions:
     def determine(self):
         """ Determines which shipyards should SPAWN, returns a dictionary of id: 'SPAWN' """
         self.weight_shipyard_tendencies()
-        sorted_weights = {k: v for k, v in sorted(self.shipyard_tendencies.items(), key=lambda item: item[1], reverse=True)}
+        sorted_weights = {k: v for k, v in
+                          sorted(self.shipyard_tendencies.items(), key=lambda item: item[1], reverse=True)}
         shipyard_ids = []
         for shipyard_id, tendency in sorted_weights.items():
             if tendency > -10:
@@ -389,26 +353,27 @@ class ShipyardDecisions:
 
     def weight(self, grid):
         """
+            Weights shipyard's tendency to spawn solely based on the objects around it
             The weighting system is rather simple:
                 - If there was an enemy ship add to the weight
                 - If there was one of my own ships, then subtract from the weight
             Take the distance of the ship into account
         """
-        # Base case: if I had no ships the spawn
-        if len(self.board.current_player.ships) == 0: return 10
-        if self.step < 50 and self.player_halite > 1000: return 10
+        if len(self.board.current_player.ships) == 0:
+            return 10
+        if self.step < 50 and self.player_halite > 1000:
+            return 10
+
         value = 0
         # Iterating through the grid
         for direction in grid.columns:
             # print(pd.isna(grid[direction].ship_id))
             if not pd.isna(grid[direction].ship_id):
                 if grid[direction].my_ship == 1:
-                    # ship_cargo: direct, distance: indirect
                     value -= 100 / grid[direction]['moves']
                 else:
-                    # Ship_cargo: direct, distance: indirect
-                    value += 1000 / grid[direction]['moves']
-                    
+                    value += 300 / grid[direction]['moves']
+
             if not pd.isna(grid[direction].shipyard_id):
                 if grid[direction].my_shipyard == 0:
                     value += 200 / grid[direction]['moves']
@@ -417,7 +382,8 @@ class ShipyardDecisions:
 
 
 class Locator:
-    """ This object returns dataframes containing the information about other ships/shipyards on the map and also in the given ship's grid. """
+    """ This module returns dataframes that could be used to analyze the board much faster """
+
     def __init__(self, board, ship):
         self.board = board
         self.ship = ship
@@ -433,10 +399,12 @@ class Locator:
             base_info = {"my_ship": 0, "moves": 0, "position": (ship.position.x, ship.position.y),
                          'cargo': ship.cell.halite,
                          'dirX': (determine_directions(self.ship_position, ship.position))[0],
-                         'dirY': (determine_directions(self.ship_position, ship.position))[1]}
+                         'dirY': (determine_directions(self.ship_position, ship.position))[1],
+                         'movesX': min(abs(self.ship_position.x - ship.position.x),
+                                       abs(21 - self.ship_position.x + ship.position.x)),
+                         'movesY': min(abs(self.ship_position.y - ship.position.y),
+                                       abs(21 - self.ship_position.y + ship.position.y))}
 
-            base_info['movesX'] = min(abs(self.ship_position.x - ship.position.x), abs(21 - self.ship_position.x + ship.position.x))
-            base_info['movesY'] = min(abs(self.ship_position.y - ship.position.y), abs(21 - self.ship_position.y + ship.position.y))
             base_info['moves'] = base_info['movesX'] + base_info['movesY']
 
             if ship_id in self.board.current_player.ship_ids and ship.id != self.ship.id:
@@ -452,14 +420,15 @@ class Locator:
         shipyards_info = {}
 
         for shipyard_id, shipyard in self.board.shipyards.items():
-            base_info = {"my_shipyard": 0,
-                         "position": (shipyard.position.x, shipyard.position.y),
+            base_info = {"my_shipyard": 0, "position": (shipyard.position.x, shipyard.position.y),
                          'dirX': (determine_directions(self.ship_position, shipyard.position))[0],
                          'dirY': (determine_directions(self.ship_position, shipyard.position))[1],
-                         'player_halite': shipyard.player.halite}
+                         'player_halite': shipyard.player.halite,
+                         'movesX': min(abs(self.ship_position.x - shipyard.position.x),
+                                       abs(21 - self.ship_position.x + shipyard.position.x)),
+                         'movesY': min(abs(self.ship_position.y - shipyard.position.y),
+                                       abs(21 - self.ship_position.y + shipyard.position.y))}
 
-            base_info['movesX'] = min(abs(self.ship_position.x - shipyard.position.x), abs(21 - self.ship_position.x + shipyard.position.x))
-            base_info['movesY'] = min(abs(self.ship_position.y - shipyard.position.y), abs(21 - self.ship_position.y + shipyard.position.y))
             base_info['moves'] = base_info['movesX'] + base_info['movesY']
 
             if shipyard_id in self.board.current_player.shipyard_ids:
@@ -475,7 +444,7 @@ class Locator:
         all_dirs = {}
 
         total_moves = len(self.grid) / 4
-        
+
         for direction, cell in self.grid.items():
 
             base_info = {
@@ -487,26 +456,25 @@ class Locator:
                 'weightX': 0, 'weightY': 0
             }
 
-            if "N" in  direction:
+            if "N" in direction:
                 base_info['dirY'] = 'N'
                 base_info['movesY'] = direction.count("N")
-            elif "S" in  direction:
+            elif "S" in direction:
                 base_info['dirY'] = 'S'
                 base_info['movesY'] = direction.count("S")
 
-            if "W" in  direction:
+            if "W" in direction:
                 base_info['dirX'] = 'W'
                 base_info['movesX'] = direction.count("W")
-            elif "E" in  direction:
+            elif "E" in direction:
                 base_info['dirX'] = 'E'
                 base_info['movesX'] = direction.count("E")
 
             if base_info['dirY'] != 'None':
                 base_info['weightY'] = (total_moves - base_info['movesY']) / (base_info['movesY'] * total_moves)
-            
+
             if base_info['dirX'] != 'None':
                 base_info['weightX'] = (total_moves - base_info['movesX']) / (base_info['movesX'] * total_moves)
-
 
             if cell.ship is not None:
                 base_info["ship_id"] = cell.ship.id
@@ -525,6 +493,7 @@ class Locator:
             all_dirs[direction] = base_info
 
         return pd.DataFrame(all_dirs)
+
 
 ####################
 # Helper Functions #
@@ -567,8 +536,9 @@ def determine_directions(point1, point2, size=21):
 
     return best_x, best_y
 
+
 def grid(cell):
-    """ Returns a dictionary of cells which are in 4 moves distance of the given cell """
+    """ Returns a dictionary of cells which are in 10 moves distance of the given cell """
     # The directions that are one move away
     north, south, west, east = cell.north, cell.south, cell.west, cell.east
     # The directions that are two moves away
@@ -600,16 +570,18 @@ def grid(cell):
         'SSSSS': s5, 'NNNNN': n5, 'WWWWW': w5, 'EEEEE': e5,
         'WWWWN': w4.north, 'WWWWS': w4.south, 'EEEEN': e4.north, 'EEEES': e4.south,
         'SSSSE': s4.east, 'SSSSW': s4.west, 'NNNNW': n4.west, 'NNNNE': n4.east,
-        'EESSS':s3.east.east, 'WWSSS': s3.west.west,'EENNN': n3.east.east, 'WWNNN': n3.west.west,
+        'EESSS': s3.east.east, 'WWSSS': s3.west.west, 'EENNN': n3.east.east, 'WWNNN': n3.west.west,
         'EEESS': e3.south.south, 'EEENN': e3.north.north, 'WWWSS': w3.south.south, 'WWWNN': w3.north.north,
         # 6 moves away
         'SSSSSS': s6, 'NNNNNN': n6, 'WWWWWW': w6, 'EEEEEE': e6,
         'WWWWWN': w5.north, 'WWWWWS': w5.south, 'EEEEEN': e5.north, 'EEEEES': e5.south,
         'SSSSSE': s5.east, 'SSSSSW': s5.west, 'NNNNNW': n5.west, 'NNNNNE': n5.east,
         'WWWWNN': w4.north.north, 'WWWWSS': w4.south.south, 'EEEENN': e4.north.north, 'EEEESS': e4.south.south,
-        'EEENNN': e3.north.north.north, 'EEESSS': e3.south.south.south, 'WWWNNN': w3.north.north.north, 'WWWSSS': w3.south.south.south,
+        'EEENNN': e3.north.north.north, 'EEESSS': e3.south.south.south, 'WWWNNN': w3.north.north.north,
+        'WWWSSS': w3.south.south.south,
         'NNNNEE': n4.east.east, 'NNNNWW': n4.west.west, 'SSSSWW': s4.west.west, 'SSSSEE': s4.east.east
     }
+
 
 def log(text, step=1):
     if step == 0:
@@ -621,7 +593,9 @@ def log(text, step=1):
             text = str(text) + '\n'
             text_file.write(text)
 
+
 log('logs:', 0)
+
 
 def agent(obs, config):
     # Make the board
@@ -640,12 +614,13 @@ def agent(obs, config):
     shipyard_ids = ShipyardDecisions(board, me).determine()
 
     for shipyard_id in me.shipyard_ids:
-        if shipyard_id in shipyard_ids: 
+        if shipyard_id in shipyard_ids:
             board.shipyards[shipyard_id].next_action = ShipyardAction.SPAWN
             new_board = board.next()
 
     for ship in me.ships:
-        log('ship-id:' + ship.id + ', pos:' + str(ship.position) + ', cargo: ' + str(ship.halite) + ', player halite: ' + str(me.halite))
+        log('ship-id:' + ship.id + ', pos:' + str(ship.position) + ', cargo: ' + str(
+            ship.halite) + ', player halite: ' + str(me.halite))
 
         if ship.id in new_board.ships.keys():
             current_ship = new_board.ships[ship.id]
@@ -653,8 +628,8 @@ def agent(obs, config):
             ship.next_action = decider.determine()
 
             new_board = board.next()
-    #     log('#########')
-        
+        #     log('#########')
+
         new_board = board.next()
 
     log(me.next_actions)
