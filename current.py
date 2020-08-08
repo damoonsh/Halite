@@ -39,6 +39,7 @@ class DecisionShip:
         self.Ships = self.locator.get_ship_info()
         self.Shipyards = self.locator.get_shipyard_info()
         self.grid = self.locator.generate_grid_df()
+        self.closest_shipyard_id =  self.closest_shipyard()
 
         # Default move which is set to mining (None)
         self.next_move = None
@@ -164,10 +165,10 @@ class DecisionShip:
         if weightX != 0: self.weights[dirX] += value * weightX
         if weightY != 0: self.weights[dirY] += value * weightY
 
-    def weight_convert(self, threshold=2000):
+    def weight_convert(self, threshold=1500):
         """ Weights the option for ship convertion. """
         # 1. If they are no shipyards left
-        no_yards_left = len(self.player.shipyards) == 0
+        no_shipyards = len(self.player.shipyards) == 0
         # 2. If it is the end of the game and we have more than 500 halite in our cargo
         end_of_game_conversion = (self.step > 396 or self.near_end()) and self.ship.halite >= 500
         # 3. There will be a threshold for the amount of cargo any ship could have
@@ -175,25 +176,22 @@ class DecisionShip:
         # 4. On shipyard already
         on_shipyard = self.ship.cell.shipyard is not None
 
-        # 5. It would not make sense to have a shipyard four moves away from another ship
-        shipyard_id = self.closest_shipyard()
-        if shipyard_id != 0:
-            shipyard_distance = self.Shipyards[shipyard_id].moves > 3
+        if no_shipyards:
+            self.weights['convert'] = 4000
+        # Don't convert if the there is shipyard of mine 2 moves away and then cell does not already have a shipyard
+        elif not on_shipyard and self.Shipyards[self.closest_shipyard_id]['moves'] > 2:
+            if ((end_of_game_conversion and threshhold_reach)):
+                self.weights['convert'] = 3000 * (self.step // 10 + 1)
+            else:
+                self.weights['convert'] = (self.ship_cargo - 1000) / (self.step // 50 + 1)
         else:
-            shipyard_distance = True
-
-        if (no_yards_left or end_of_game_conversion or threshhold_reach) and not on_shipyard and shipyard_distance:
-            self.weights['convert'] = 3000 * (self.step // 10 + 1)
-        elif not on_shipyard and shipyard_distance:
-            self.weights['convert'] = round((self.ship_cargo - 1000) / (self.step // 50 + 1), 3)
-        # else:
-        #     self.weights['convert'] = round((self.ship_cargo - threshold) / (self.step // 50 + 1), 3)
+            self.weights['convert'] = -1000
 
     def deposit(self):
         """ Weights the tendency to deposit and adds to the directions which lead to the given shipyard. """
         log('  Deposit:') # logging
         # measure tendency
-        deposit_tendency = 10 * self.ship_cargo
+        deposit_tendency = 10 * self.ship_cargo * (self.step / 200)
         self.add_accordingly(deposit_tendency)
 
     def attack_enemy_shipyard(self, shipyard_id):
@@ -263,35 +261,39 @@ class DecisionShip:
             self.weights[dirX] += value
             self.weights[dirY] += value
 
-    # def shipyard_status(self):
-    #     """ This function gives tendency to go to shipyards within the map. """
-    #     if not self.Shipyards.empty:
-    #         for shipyard in self.player.shipyards:
-    #             self.analyze_shipyard_surroundings(shipyard.id)
+    def shipyard_status(self):
+        """ This function gives tendency to go to shipyards within the map. """
+        if not self.Shipyards.empty:
+            for shipyard in self.player.shipyards:
+                self.analyze_shipyard_surroundings(shipyard.id)
 
-    # def analyze_shipyard_surroundings(self, shipyard_id):
-    #     """ Checks to see if a given shipyard needs protection or not? """
-    #     shipyard = self.board.shipyards[shipyard_id]
+    def analyze_shipyard_surroundings(self, shipyard_id):
+        """ Checks to see if a given shipyard needs protection or not? """
+        shipyard = self.board.shipyards[shipyard_id]
 
-    #     log('  Shipyard status:' + shipyard.id)
+        log('  Shipyard status:' + shipyard.id)
 
-    #     shipyard_locator = Locator(self.board, shipyard)
-    #     shipyard_grid = shipyard_locator.generate_grid_df()
+        shipyard_grid = Locator(self.board, shipyard).generate_grid_df()
 
-    #     for direction in list(shipyard_grid.columns):
-    #         ship_id = shipyard_grid[direction].ship_id
-    #         # IF there is a ship on that cell
-    #         if not pd.isna(ship_id):
-    #             dirX, dirY = determine_directions(self.current_position, shipyard.position)
+        for direction in list(shipyard_grid.columns):
+            ship_id = shipyard_grid[direction].ship_id
+            # IF there is a ship on that cell
+            if not pd.isna(ship_id):
+                dirX, dirY = shipyard_grid['dirX'], shipyard_grid['dirY']
+                movesX, movesY = shipyard_grid['movesX'], shipyard_grid['movesY']
+                weightsX, weightsY = shipyard_grid['weightX'], shipyard_grid['weightY']
 
-    #             if shipyard_grid[direction].my_ship == 1:
-    #                 my_ship_weight = -2 * self.ship_cargo
-    #                 log('    my ship, adding')
-    #                 self.add_accordingly(dirX, dirY, my_ship_weight)
-    #             else:
-    #                 enemy_ship_weight = 3 * self.ship_cargo
-    #                 log('    enemy ship, adding')
-    #                 self.add_accordingly(dirX, dirY, enemy_ship_weight)
+
+                if shipyard_grid[direction].my_ship == 1:
+                    my_ship_weight = -2 * self.ship_cargo
+                    self.weights[dirX] = my_ship_weight * weightX
+                    self.weights[dirY] = my_ship_weight * weightsY
+                    log('    my ship, adding: ' + str(round(my_ship_weight),3) + ' to '+ dirX + ', moves: ' + weightX + ', and :' + dirY + ', moves: ' + weightY)
+                else:
+                    enemy_ship_weight = 3 * self.ship_cargo
+                    self.weights[dirX] = enemy_ship_weight * weightX
+                    self.weights[dirY] = enemy_ship_weight * weightsY
+                    log('    enemy ship, adding'+ str(round(enemy_ship_weight),3) + ' to '+ dirX + ', moves: ' + weightX + ', and :' + dirY + ', moves: ' + weightY)
 
     def closest_shipyard(self):
         """ This function will return the distance to the closest shipyard's id. """
