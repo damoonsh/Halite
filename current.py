@@ -40,7 +40,10 @@ class DecisionShip:
         self.Shipyards = self.locator.get_shipyard_info()
         self.grid = self.locator.generate_grid_df()
         self.closest_shipyard_id = self.closest_shipyard()
-        self.closest_shipyard_distance = self.Shipyards[self.closest_shipyard_id]['moves']
+        if self.closest_shipyard_id != 0:
+            self.closest_shipyard_distance = self.Shipyards[self.closest_shipyard_id]['moves']
+        else:
+            self.closest_shipyard_distance = 1
 
         # Default move which is set to mining (None)
         self.next_move = None
@@ -86,8 +89,10 @@ class DecisionShip:
         if weightY != 0:
             self.weights[dirY] += value * weightY
 
-    def weight_convert(self, threshold=1500):
+    def weight_convert(self, base_threshold=600):
         """ Weights the option for ship convertion. """
+        threshold = base_threshold + 500 * self.step // 50
+
         # 1. If they are no shipyards left
         no_shipyards = len(self.player.shipyards) == 0
         # 2. If it is the end of the game and we have more than 500 halite in our cargo
@@ -103,7 +108,7 @@ class DecisionShip:
             if (end_of_game_conversion and threshhold_reach):
                 self.weights['convert'] = 3000 * (self.step // 10 + 1)
             else:
-                self.weights['convert'] = (self.ship_cargo - threshold) * 50
+                self.weights['convert'] = (self.ship_cargo - threshold) * 40
         else:
             self.weights['convert'] = -1000
 
@@ -143,7 +148,7 @@ class DecisionShip:
                     if self.Ships[Ship_id]['moves'] == 1:
                         self.eliminated_moves.append(direction)
                     else:
-                        self.avoid_self_colision(Ship_id)
+                        self.distribute_ships(Ship_id)
                 else:
                     if self.Ships[Ship_id]['moves'] == 1 and self.Ships[Ship_id]['cargo'] < self.ship_cargo:
                         self.eliminated_moves.append(direction)
@@ -161,7 +166,7 @@ class DecisionShip:
                     self.attack_enemy_shipyard(Shipyard_id)
 
             # 2. Trigger movement in the main four direction solely based on the amount of halite each cell has
-            main_dir_encourage = self.grid[direction].halite - 50
+            main_dir_encourage = self.grid[direction].halite - (10 + self.step // 50 * 10)
             self.add_accordingly(main_dir_encourage, title='  main4: ',  loging=False)
 
             # 3. Either encourage mining or discourage it by adding the difference between cells to the mine
@@ -178,12 +183,12 @@ class DecisionShip:
         # See if any of the shipyards need defending
         self.shipyard_status()
 
-    def avoid_self_colision(self, ship_id):
-        """ This function is called to avoid lower the tendency for cell with my own ships. """
+    def distribute_ships(self, ship_id):
+        """ This function lowers the ships tendency to densely populate an area """
         # Given that they are not one move apart the discouragement should not be that strong
         discourage_collision = -10 * abs(self.ship_cargo - self.Ships[ship_id].cargo)
 
-        self.add_accordingly(discourage_collision, title='Avoid-collision')
+        self.add_accordingly(discourage_collision, title='Distribution')
 
     def deal_enemy_ship(self, ship_id):
         """ 
@@ -264,33 +269,31 @@ class DecisionShip:
             # If there is a ship on that cell
             if not pd.isna(ship_id):
                 if shipyard_grid[direction].my_ship == 1:
-                    my_ship_weight = -100 / ((self.ship_cargo + 5) * shipyard_grid[direction]['moves'])
+                    my_ship_weight = -1e4 / ((self.ship_cargo + 5) * shipyard_grid[direction]['moves'])
                     self.weights[dirX] += my_ship_weight
                     self.weights[dirY] += my_ship_weight
                     # if self.step > 100 and self.step < 110: 
                     log('    my ship, adding: ' + str(round(my_ship_weight, 3)) + ' to ' + dirX + ' and ' + dirY)
                 else:
-                    enemy_ship_weight = 300 / ((self.ship_cargo + 5) * shipyard_grid[direction]['moves'])
+                    enemy_ship_weight = 3e4 / ((self.ship_cargo + 5) * shipyard_grid[direction]['moves'])
                     self.weights[dirX] += enemy_ship_weight
                     self.weights[dirY] += enemy_ship_weight
                     # if self.step > 100 and self.step < 110: 
                     log('    en ship, adding: ' + str(round(enemy_ship_weight, 3)) + ' to ' + dirX + ' and ' + dirY)
 
     def closest_shipyard(self):
-        """ This function will return the distance to the closest shipyard's id. """
+        """ Returns the distance to the closest shipyard's id. """
         shipyard_id = 0  # The default value would be zero meaning that they either no shipyard or I did not have any
         # First we should check to see if there are any Shipyards at all
         if not self.Shipyards.empty:
             # Then we should check to see if I have any shipyards
             if not self.Shipyards.T[self.Shipyards.T['my_shipyard'] == 1].empty:
-                min_val = self.Shipyards.T[self.Shipyards.T['my_shipyard'] == 1]['moves']
-                tMyShipyards = self.Shipyards.T[self.Shipyards.T['my_shipyard'] == 1]
-                shipyard_id = list(tMyShipyards[tMyShipyards['moves'] == min_val].T.columns)[0]
+                shipyard_id = self.Shipyards.T[self.Shipyards.T['my_shipyard'] == 1]['moves'].astype('int').idxmin()
 
         return shipyard_id
 
     def near_end(self):
-        """ This function is intended to determine if the game is about to end so the ships with halite can
+        """ Determines if the game is about to end so the ships with halite can
         convert to shipyard and maximum the halite we will end up with. """
         count = 0
 
