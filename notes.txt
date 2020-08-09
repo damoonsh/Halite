@@ -17,6 +17,13 @@ They are different aspect to this agent:
 
 - Take notes and apply them all.
 
+- Why does it run away from enemy ships?
+- Why no conversion?
+- Low mining rate: The deposit rate was way too high
+- Too encouraged to attack enemy shipyards
+
+Note: No need to add the other cell with more than 6 moves for now, let's work on weights then add them
+
 # Implement: 
     - For better accuracy extend the reach to 10 moves apart
     - *Come up with tags so when being followed to go after halite
@@ -36,4 +43,10 @@ They are different aspect to this agent:
     - One of the reasons I am having trouble is the methods are not consistent and I need to write
     the ShipYardDecision module and also work on the conversion issue.
     - Make the ships get far from the shipyard at the beginning steps so they would convert.
-    - Easily crashes with other ships
+    - Easily crashes with other ships  
+    - The decision to attack an enemy shipyard is dependent on how close it is to the my shipyard
+    - avoid_collision should focus on distributing the  ships
+    - Maybe keep track of ship's previous move and regulate it so it would not repeat
+    - The player that is being sent to module is not updated
+    - Check the function that finds the closest shipyard_id
+    - Could save the previous weights of moves and then use rolling averages
