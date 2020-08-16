@@ -35,25 +35,12 @@ Note: No need to add the other cell with more than 6 moves for now, let's work o
 
 
 # Fixes: 
-    - There should be an extra stress when a given cell is full of halite
-    - Also, the weight for convert should be high
-    - Some shipyards don't have either a vertical or horizontal difference so don't add that
-    - Also, if there was a (mine) shipyard and ship on a cell don't go there
     - Should not convert where it has a lot of halite
-    - One of the reasons I am having trouble is the methods are not consistent and I need to write
-    the ShipYardDecision module and also work on the conversion issue.
-    - Make the ships get far from the shipyard at the beginning steps so they would convert.
-    - Easily crashes with other ships  
-    - The decision to attack an enemy shipyard is dependent on how close it is to the my shipyard
-    - avoid_collision should focus on distributing the  ships
-    - Maybe keep track of ship's previous move and regulate it so it would not repeat
-    - The player that is being sent to module is not updated
-    - Could save the previous weights of moves and then use rolling averages
+    - The decision to attack an enemy shipyard is dependent on how close it is to my shipyard
+    - avoid_collision should focus on distributing the ships
     - Weightings for shipyard status don't work well
-    - Since I am counting so much on shipyards: ease the process for it.
-    - The main problem is that I am getting hit so easily
-    - Probably should increase mining
     - write down the equations for each case to cancel each other out in a more meaningful way
     - If there was an enemy ship one move away from the shipyard, just spawn
-    - There is a problem with the updating process, check this one <----
-    - Maybe write another module that evaluates surroundings
+    - Maybe write another module that evaluates surroundings <----
+   - Add exponent to the main4 thing
+   - Shipyard status adds to a shipyard close and subtracts from a far shipyard, fix it
