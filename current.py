@@ -82,7 +82,7 @@ class DecisionShip:
         if weightX != 0: self.weights[dirX] += value * weightX
         if weightY != 0: self.weights[dirY] += value * weightY
     # Add the relation with the amount of halite on the cell
-    def weight_convert(self, base_threshold=1000):
+    def weight_convert(self, base_threshold=1500):
         """ Weights the option for ship conversion. """
         # Calculating the threshhold
         threshold = base_threshold + 200 * (len(self.player.shipyards) // 3)
@@ -95,7 +95,7 @@ class DecisionShip:
         on_shipyard = self.ship.cell.shipyard is not None
 
         if no_shipyards and not on_shipyard:
-            self.weights['convert'] = 4e3
+            self.weights['convert'] = 1e4
         elif (self.Shipyards[self.closest_shipyard_id]['moves'] < 15 and self.Shipyards[self.closest_shipyard_id]['moves'] > 2):
             self.weights['convert'] = (self.ship_cargo - threshold) * 40
         else:
@@ -159,13 +159,11 @@ class DecisionShip:
                     self.attack_enemy_shipyard(Shipyard_id)
 
             # 2. Trigger movement in the main four direction solely based on the amount of halite each cell has
-            main_dir_encourage = self.grid[direction].halite
+            main_dir_encourage = self.grid[direction].halite - 30
             self.add_accordingly(main_dir_encourage, title='  main4: ', loging=False)
 
             # 3. Either encourage mining or discourage it by adding the difference between cells to the mine
             mining_trigger = (self.current_cell.halite - self.grid[direction].halite) / self.grid[direction].moves
-            # When there is a ship on a cell with halite, the value should be halved
-            if not pd.isna(Ship_id): mining_trigger *= 0.5
             self.weights['mine'] += mining_trigger
 
         # The correlation of the mining with cell's halite
@@ -197,7 +195,7 @@ class DecisionShip:
         # 1. Directly discouraging the movement
         if len(self.current_direction) == 2:
             # When the enemy ship is two moves away, there should be a strong discouragement
-            direction_discouragement = -10 * (cargo_diff + 0.5) ** 2
+            direction_discouragement = -10 * (self.ship.halite + 0.5) ** 2
         else:
             direction_discouragement = -10 * cargo_diff
         self.add_accordingly(direction_discouragement, title='Get-Away', loging=True)
@@ -361,7 +359,7 @@ class ShipyardDecisions:
                 if grid[direction].my_ship == 1:
                     value -= 100 / grid[direction]['moves']
                 else:
-                    value += 1e3 / grid[direction]['moves']
+                    value += 1e2 / grid[direction]['moves']
                     # If there was an enemy ship one move away from my shipyard then spawn
                     if grid[direction]['moves'] == 1 and self.player_halite > 500: 
                         value += 1e3 
@@ -463,10 +461,10 @@ class Locator:
                 base_info['movesX'] = direction.count("E")
 
             if base_info['dirY'] != 'None':
-                base_info['weightY'] = round((total_moves - base_info['movesY']) / (base_info['movesY'] * total_moves), 3)
+                base_info['weightY'] = ((total_moves - base_info['movesY']) * ((len(direction) - base_info['movesY']) ** 2 + 1)) /(total_moves * len(direction) ** 2)
 
             if base_info['dirX'] != 'None':
-                base_info['weightX'] = round((total_moves - base_info['movesX']) / (base_info['movesX'] * total_moves), 3)
+                base_info['weightX'] = ((total_moves - base_info['movesX']) * ((len(direction) - base_info['movesX']) ** 2 + 1)) /(total_moves * len(direction) ** 2)
 
             if cell.ship is not None:
                 base_info["ship_id"] = cell.ship.id
@@ -633,17 +631,17 @@ def agent(obs, config):
         for ship_id in board.current_player.ship_ids:
             if ship_id in board.current_player.ship_ids:
                 log(' Pos:' + str(board.ships[ship_id].position) + ', cargo: ' + str(board.ships[ship_id].halite) + ', player halite: ' + str(board.current_player.halite))
+                
+                next_action, action_type = DecisionShip(board, ship_id, step).determine()
+                
+                if action_type != 'mine':
+                    actions[ship_id] = movement_dictionary[action_type]
+                    board.ships[ship_id].next_action = next_action
+                    
+                    board = board.next()            
             else:
                 log(' Not found')
 
-            next_action, action_type = DecisionShip(board, ship_id, step).determine()
-            
-            if action_type != 'mine':
-                actions[ship_id] = movement_dictionary[action_type]
-                board.ships[ship_id].next_action = next_action
-                
-                board = board.next()
-        
         shipyard_ids = ShipyardDecisions(board, board.current_player, step).determine()
 
         for shipyard_id in board.current_player.shipyard_ids:
