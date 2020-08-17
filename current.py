@@ -1,5 +1,6 @@
 from kaggle_environments.envs.halite.helpers import Board, ShipAction, ShipyardAction
 import pandas as pd
+import numpy as np
 
 
 class DecisionShip:
@@ -82,7 +83,7 @@ class DecisionShip:
         if weightX != 0: self.weights[dirX] += value * weightX
         if weightY != 0: self.weights[dirY] += value * weightY
     # Add the relation with the amount of halite on the cell
-    def weight_convert(self, base_threshold=1500):
+    def weight_convert(self, base_threshold=800):
         """ Weights the option for ship conversion. """
         # Calculating the threshhold
         threshold = base_threshold + 200 * (len(self.player.shipyards) // 3)
@@ -96,7 +97,7 @@ class DecisionShip:
 
         if no_shipyards and not on_shipyard:
             self.weights['convert'] = 1e4
-        elif (self.Shipyards[self.closest_shipyard_id]['moves'] < 15 and self.Shipyards[self.closest_shipyard_id]['moves'] > 2):
+        elif self.Shipyards[self.closest_shipyard_id]['moves'] < 10 and not on_shipyard:
             self.weights['convert'] = (self.ship_cargo - threshold) * 40
         else:
             self.eliminated_moves.append('convert')
@@ -159,7 +160,7 @@ class DecisionShip:
                     self.attack_enemy_shipyard(Shipyard_id)
 
             # 2. Trigger movement in the main four direction solely based on the amount of halite each cell has
-            main_dir_encourage = self.grid[direction].halite - 30
+            main_dir_encourage = self.grid[direction].halite - 50
             self.add_accordingly(main_dir_encourage, title='  main4: ', loging=False)
 
             # 3. Either encourage mining or discourage it by adding the difference between cells to the mine
@@ -187,7 +188,7 @@ class DecisionShip:
 
     def attack_enemy_ship(self, diff):
         """ This function encourages attacking the enemy ship """
-        attack_encouragement = 6 * diff
+        attack_encouragement = 10 * diff
         self.add_accordingly(attack_encouragement, title='Attacking-Enemy-Ship', loging=True)
 
     def get_away(self, cargo_diff=0):
@@ -195,13 +196,13 @@ class DecisionShip:
         # 1. Directly discouraging the movement
         if len(self.current_direction) == 2:
             # When the enemy ship is two moves away, there should be a strong discouragement
-            direction_discouragement = -10 * (self.ship.halite + 0.5) ** 2
+            direction_discouragement = -10 * (self.ship.halite + 10) ** 2
         else:
             direction_discouragement = -10 * cargo_diff
         self.add_accordingly(direction_discouragement, title='Get-Away', loging=True)
 
         # 2. Encouraging going to the closest shipyard
-        closest_shipyard_encouragement = cargo_diff / (self.grid[self.current_direction]['moves'] ** 2) 
+        closest_shipyard_encouragement = cargo_diff / self.grid[self.current_direction]['moves']
         self.go_to_closest_shipyard(closest_shipyard_encouragement)
 
     def deposit(self):
@@ -209,18 +210,15 @@ class DecisionShip:
         if self.near_end():
             deposit_tendency = self.ship_cargo ** 2
         else:
-            deposit_tendency = 10 * self.ship_cargo
+            deposit_tendency = 10 * self.ship_cargo ** 1.2
         self.add_accordingly(deposit_tendency, title='Deposit', loging=True)
 
     def attack_enemy_shipyard(self, shipyard_id):
         """ Weights the tendency to attack the enemy shipyard. """
-        if len(self.player.ships) >= 5 and self.player.halite > 1000 and self.ship_cargo < 150:
-            destory_shipyard = 1e5 / len(self.current_direction)
-            self.add_accordingly(destory_shipyard, title='Destroy_en_shipyard')
-        elif len(self.current_direction) != 1:
-            shipyard_discouragement = -2e3 / len(self.current_direction)
-            self.add_accordingly(shipyard_discouragement, title='Avoid_En_Shipyard')
-        else:
+        if len(self.player.ships) >= 2 and self.player.halite > 700 and self.ship_cargo < 150:
+            destory_shipyard = 1e4 / len(self.current_direction)
+            self.add_accordingly(destory_shipyard, title='Destroy_en_shipyard', loging=True)
+        elif len(self.current_direction) == 1 and self.ship_cargo < 200:
             self.eliminated_moves.append(self.current_direction)
 
     def go_to_closest_shipyard(self, value):
@@ -253,16 +251,17 @@ class DecisionShip:
                 if shipyard_grid[direction].my_ship == 1:
                     value += -1e4 / shipyard_grid[direction]['moves'] ** 2
                 else:
-                    value += 2e4 / shipyard_grid[direction]['moves'] ** 2
+                    value += 1.5e4 / shipyard_grid[direction]['moves'] ** 2
 
-        # More concenteration on the closest shipyard
-        if shipyard_id == self.closest_shipyard_id: value *= 2
+        if value > 0:
+            # More concenteration on the closest shipyard
+            if shipyard_id == self.closest_shipyard_id: value *= 2
+            
+            self.weights[dirX] += value
+            self.weights[dirY] += value
+
+            log('  Shipyard status: ' + str(shipyard.position) + ', adding: ' + str(round(value, 3)) + ' to ' + dirX + ', ' + dirY)
         
-        self.weights[dirX] += value
-        self.weights[dirY] += value
-
-        log('  Shipyard status: ' + str(shipyard.position) + ', adding: ' + str(round(value, 3)) + ' to ' + dirX + ', ' + dirY)
-    
     def closest_shipyard(self):
         """ Returns the closest shipyard's id. """
         shipyard_id = 0  # The default value would be zero meaning that they either no shipyard or I did not have any
@@ -461,10 +460,14 @@ class Locator:
                 base_info['movesX'] = direction.count("E")
 
             if base_info['dirY'] != 'None':
-                base_info['weightY'] = ((total_moves - base_info['movesY']) * ((len(direction) - base_info['movesY']) ** 2 + 1)) /(total_moves * len(direction) ** 2)
+                relative = (total_moves - base_info['movesY']) / total_moves
+                inner_relative = -1 * (np.log( (len(direction) - base_info['movesY'] + 0.1) / len(direction) ) / base_info['movesY'] ** 2)
+                base_info['weightY'] = relative * inner_relative
 
             if base_info['dirX'] != 'None':
-                base_info['weightX'] = ((total_moves - base_info['movesX']) * ((len(direction) - base_info['movesX']) ** 2 + 1)) /(total_moves * len(direction) ** 2)
+                relative = (total_moves - base_info['movesX']) / total_moves
+                inner_relative = -1 * (np.log( (len(direction) - base_info['movesX'] + 0.1) / len(direction)) / base_info['movesX'] ** 2)
+                base_info['weightX'] = relative * inner_relative
 
             if cell.ship is not None:
                 base_info["ship_id"] = cell.ship.id
