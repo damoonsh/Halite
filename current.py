@@ -83,10 +83,10 @@ class DecisionShip:
         if weightX != 0: self.weights[dirX] += value * weightX
         if weightY != 0: self.weights[dirY] += value * weightY
     # Add the relation with the amount of halite on the cell
-    def weight_convert(self, base_threshold=800):
+    def weight_convert(self, base_threshold=500):
         """ Weights the option for ship conversion. """
         # Calculating the threshhold
-        threshold = base_threshold + 200 * (len(self.player.shipyards) // 3)
+        threshold = base_threshold + 500 * (len(self.player.shipyards) // 3)
         
         # 1. If they are no shipyards left
         no_shipyards = len(self.player.shipyards) == 0
@@ -160,7 +160,7 @@ class DecisionShip:
                     self.attack_enemy_shipyard(Shipyard_id)
 
             # 2. Trigger movement in the main four direction solely based on the amount of halite each cell has
-            main_dir_encourage = self.grid[direction].halite - 50
+            main_dir_encourage = self.grid[direction].halite
             self.add_accordingly(main_dir_encourage, title='  main4: ', loging=False)
 
             # 3. Either encourage mining or discourage it by adding the difference between cells to the mine
@@ -175,7 +175,7 @@ class DecisionShip:
         """ This function lowers the ships tendency to densely populate an area """
         distribution_encouragement = -10 * abs(self.ship_cargo - self.Ships[ship_id].cargo) / self.Ships[ship_id].moves
 
-        self.add_accordingly(distribution_encouragement, title='Distribution', loging=True)
+        self.add_accordingly(distribution_encouragement, title='Distribution', loging=False)
 
     def deal_enemy_ship(self, ship_id):
         """ This function will evaluate to either attack or get_away from an enemy ship based on the 
@@ -189,7 +189,7 @@ class DecisionShip:
     def attack_enemy_ship(self, diff):
         """ This function encourages attacking the enemy ship """
         attack_encouragement = 10 * diff
-        self.add_accordingly(attack_encouragement, title='Attacking-Enemy-Ship', loging=True)
+        self.add_accordingly(attack_encouragement, title='Attacking-Enemy-Ship', loging=False)
 
     def get_away(self, cargo_diff=0):
         """ This function is called when my ship needs to get away from a ship which might be following it """
@@ -199,7 +199,7 @@ class DecisionShip:
             direction_discouragement = -10 * (self.ship.halite + 10) ** 2
         else:
             direction_discouragement = -10 * cargo_diff
-        self.add_accordingly(direction_discouragement, title='Get-Away', loging=True)
+        self.add_accordingly(direction_discouragement, title='Get-Away', loging=False)
 
         # 2. Encouraging going to the closest shipyard
         closest_shipyard_encouragement = cargo_diff / self.grid[self.current_direction]['moves']
@@ -211,14 +211,14 @@ class DecisionShip:
             deposit_tendency = self.ship_cargo ** 2
         else:
             deposit_tendency = 10 * self.ship_cargo ** 1.2
-        self.add_accordingly(deposit_tendency, title='Deposit', loging=True)
+        self.add_accordingly(deposit_tendency, title='Deposit', loging=False)
 
     def attack_enemy_shipyard(self, shipyard_id):
         """ Weights the tendency to attack the enemy shipyard. """
-        if len(self.player.ships) >= 2 and self.player.halite > 700 and self.ship_cargo < 150:
+        if len(self.player.ships) >= 2 and self.player.halite > 700 and self.ship_cargo < 30 and self.closest_shipyard_distance < 5:
             destory_shipyard = 1e4 / len(self.current_direction)
-            self.add_accordingly(destory_shipyard, title='Destroy_en_shipyard', loging=True)
-        elif len(self.current_direction) == 1 and self.ship_cargo < 200:
+            self.add_accordingly(destory_shipyard, title='Destroy_en_shipyard', loging=False)
+        elif len(self.current_direction) == 1 and self.ship_cargo > 100:
             self.eliminated_moves.append(self.current_direction)
 
     def go_to_closest_shipyard(self, value):
@@ -229,7 +229,7 @@ class DecisionShip:
             self.weights[dirX] += value
             self.weights[dirY] += value
 
-            log('   Shipyard: ' + str(self.board.shipyards[self.closest_shipyard_id].position) + ', adding ' + str(round(value, 3)) + ' to ' + dirX + ' and ' + dirY)
+            # log('   Shipyard: ' + str(self.board.shipyards[self.closest_shipyard_id].position) + ', adding ' + str(round(value, 3)) + ' to ' + dirX + ' and ' + dirY)
 
     def shipyard_status(self):
         """ Measures tendency for the shipyards within the map """
@@ -260,7 +260,7 @@ class DecisionShip:
             self.weights[dirX] += value
             self.weights[dirY] += value
 
-            log('  Shipyard status: ' + str(shipyard.position) + ', adding: ' + str(round(value, 3)) + ' to ' + dirX + ', ' + dirY)
+            # log('  Shipyard status: ' + str(shipyard.position) + ', adding: ' + str(round(value, 3)) + ' to ' + dirX + ', ' + dirY)
         
     def closest_shipyard(self):
         """ Returns the closest shipyard's id. """
@@ -322,7 +322,7 @@ class ShipyardDecisions:
                           sorted(self.shipyard_tendencies.items(), key=lambda item: item[1], reverse=True)}
         shipyard_ids = []
         for shipyard_id, tendency in sorted_weights.items():
-            if tendency > -10 and self.player_halite > 1000:
+            if tendency > -10 and self.player_halite > 500:
                 shipyard_ids.append(shipyard_id)
 
         # log('Shipyards: ' + str(shipyard_ids))
@@ -348,7 +348,7 @@ class ShipyardDecisions:
         """
         if len(self.board.current_player.ships) == 0:
             return 10
-        if self.step < 15 and self.player_halite > 1000:
+        if self.step < 30 and self.player_halite > 500:
             return 10
 
         value = 0
@@ -356,9 +356,9 @@ class ShipyardDecisions:
         for direction in grid.columns:
             if not pd.isna(grid[direction].ship_id):
                 if grid[direction].my_ship == 1:
-                    value -= 100 / grid[direction]['moves']
+                    value -= 150 / grid[direction]['moves']
                 else:
-                    value += 1e2 / grid[direction]['moves']
+                    value += 100 / grid[direction]['moves']
                     # If there was an enemy ship one move away from my shipyard then spawn
                     if grid[direction]['moves'] == 1 and self.player_halite > 500: 
                         value += 1e3 
@@ -631,27 +631,27 @@ def agent(obs, config):
     if not(len(board.current_player.ships) == 0 and board.current_player.halite < 500):
         log(str(step + 1) + '|-------------------------------------------------------')
 
-        for ship_id in board.current_player.ship_ids:
-            if ship_id in board.current_player.ship_ids:
-                log(' Pos:' + str(board.ships[ship_id].position) + ', cargo: ' + str(board.ships[ship_id].halite) + ', player halite: ' + str(board.current_player.halite))
+    for ship_id in board.current_player.ship_ids:
+        if ship_id in board.current_player.ship_ids:
+            log(' Pos:' + str(board.ships[ship_id].position) + ', cargo: ' + str(board.ships[ship_id].halite) + ', player halite: ' + str(board.current_player.halite))
                 
-                next_action, action_type = DecisionShip(board, ship_id, step).determine()
+            next_action, action_type = DecisionShip(board, ship_id, step).determine()
                 
-                if action_type != 'mine':
-                    actions[ship_id] = movement_dictionary[action_type]
-                    board.ships[ship_id].next_action = next_action
+            if action_type != 'mine':
+                actions[ship_id] = movement_dictionary[action_type]
+                board.ships[ship_id].next_action = next_action
                     
-                    board = board.next()            
-            else:
-                log(' Not found')
+            board = board.next()
+        else:
+            log(' Not found')
 
-        shipyard_ids = ShipyardDecisions(board, board.current_player, step).determine()
+    shipyard_ids = ShipyardDecisions(board, board.current_player, step).determine()
 
-        for shipyard_id in board.current_player.shipyard_ids:
-            if shipyard_id in shipyard_ids:
-                actions[shipyard_id] = 'SPAWN'
-                board.shipyards[shipyard_id].next_action = ShipyardAction.SPAWN
+    for shipyard_id in board.current_player.shipyard_ids:
+        if shipyard_id in shipyard_ids:
+            actions[shipyard_id] = 'SPAWN'
+            board.shipyards[shipyard_id].next_action = ShipyardAction.SPAWN
             
-                board = board.next()
+            board = board.next()
         
     return actions
