@@ -83,7 +83,7 @@ class DecisionShip:
         if weightX != 0: self.weights[dirX] += value * weightX
         if weightY != 0: self.weights[dirY] += value * weightY
     # Add the relation with the amount of halite on the cell
-    def weight_convert(self, base_threshold=500):
+    def weight_convert(self, base_threshold=600):
         """ Weights the option for ship conversion. """
         # Calculating the threshhold
         threshold = base_threshold + 500 * (len(self.player.shipyards) // 3)
@@ -150,7 +150,10 @@ class DecisionShip:
                         # Go to the closest shipyard preferably
                         self.go_to_closest_shipyard(self.ship_cargo ** 3)
                     else:
-                        self.deal_enemy_ship(Ship_id)
+                        # This part has been change and one more check could be helpful
+                        if pd.isna(Shipyard_id):
+                            if self.grid[direction].my_shipyard != 1:
+                                self.deal_enemy_ship(Ship_id)
 
             # 1.2 If there was a shipyard
             if not pd.isna(Shipyard_id):
@@ -160,11 +163,11 @@ class DecisionShip:
                     self.attack_enemy_shipyard(Shipyard_id)
 
             # 2. Trigger movement in the main four direction solely based on the amount of halite each cell has
-            main_dir_encourage = self.grid[direction].halite
+            main_dir_encourage = 10 * self.grid[direction].halite
             self.add_accordingly(main_dir_encourage, title='  main4: ', loging=False)
 
             # 3. Either encourage mining or discourage it by adding the difference between cells to the mine
-            mining_trigger = (self.current_cell.halite - self.grid[direction].halite) / self.grid[direction].moves
+            mining_trigger = 10 * (self.current_cell.halite - self.grid[direction].halite) / self.grid[direction].moves
             self.weights['mine'] += mining_trigger
 
         # The correlation of the mining with cell's halite
@@ -181,14 +184,14 @@ class DecisionShip:
         """ This function will evaluate to either attack or get_away from an enemy ship based on the 
         simple observation: If my ship had more cargo then I should not attack. """
         # If the ship's cargo was more than enemy's cargo and it was not equal to zero then get away otherwise attack
-        if self.ship_cargo >= self.Ships[ship_id].cargo and self.ship_cargo != 0:
+        if self.ship_cargo > self.Ships[ship_id].cargo + 0.25 * self.grid[self.current_direction]['halite'] and self.ship_cargo != 0:
             self.get_away(cargo_diff=abs(self.Ships[ship_id].cargo - self.ship_cargo))
         else:
             self.attack_enemy_ship(self.Ships[ship_id].cargo - self.ship_cargo)
 
     def attack_enemy_ship(self, diff):
         """ This function encourages attacking the enemy ship """
-        attack_encouragement = 10 * diff
+        attack_encouragement = 10 * (diff + 1) ** 2 / (self.closest_shipyard_distance + 0.1)
         self.add_accordingly(attack_encouragement, title='Attacking-Enemy-Ship', loging=False)
 
     def get_away(self, cargo_diff=0):
@@ -196,7 +199,7 @@ class DecisionShip:
         # 1. Directly discouraging the movement
         if len(self.current_direction) == 2:
             # When the enemy ship is two moves away, there should be a strong discouragement
-            direction_discouragement = -10 * (self.ship.halite + 10) ** 2
+            direction_discouragement = -10 * (self.ship.halite + 10) ** 5
         else:
             direction_discouragement = -10 * cargo_diff
         self.add_accordingly(direction_discouragement, title='Get-Away', loging=False)
@@ -322,7 +325,7 @@ class ShipyardDecisions:
                           sorted(self.shipyard_tendencies.items(), key=lambda item: item[1], reverse=True)}
         shipyard_ids = []
         for shipyard_id, tendency in sorted_weights.items():
-            if tendency > -10 and self.player_halite > 500:
+            if tendency > 0 and self.player_halite >= 500:
                 shipyard_ids.append(shipyard_id)
 
         # log('Shipyards: ' + str(shipyard_ids))
@@ -348,7 +351,7 @@ class ShipyardDecisions:
         """
         if len(self.board.current_player.ships) == 0:
             return 10
-        if self.step < 30 and self.player_halite > 500:
+        if self.step < 40 and self.player_halite > 500 + 500 * (self.step // 50):
             return 10
 
         value = 0
@@ -432,8 +435,6 @@ class Locator:
         """ Generates a Dataframe describing the information of objects and cells in the grid of the ship. """
         all_dirs = {}
 
-        total_moves = len(self.grid) / 4
-
         for direction, cell in self.grid.items():
 
             base_info = {
@@ -460,14 +461,12 @@ class Locator:
                 base_info['movesX'] = direction.count("E")
 
             if base_info['dirY'] != 'None':
-                relative = (total_moves - base_info['movesY']) / total_moves
-                inner_relative = -1 * (np.log( (len(direction) - base_info['movesY'] + 0.1) / len(direction) ) / base_info['movesY'] ** 2)
-                base_info['weightY'] = relative * inner_relative
+                relative = 1 / (len(direction) ** 2 * base_info['movesY']) 
+                base_info['weightY'] =  relative
 
             if base_info['dirX'] != 'None':
-                relative = (total_moves - base_info['movesX']) / total_moves
-                inner_relative = -1 * (np.log( (len(direction) - base_info['movesX'] + 0.1) / len(direction)) / base_info['movesX'] ** 2)
-                base_info['weightX'] = relative * inner_relative
+                relative = 1 / (len(direction) ** 2 * base_info['movesX']) 
+                base_info['weightX'] = relative
 
             if cell.ship is not None:
                 base_info["ship_id"] = cell.ship.id
@@ -539,11 +538,11 @@ def grid(cell):
     n3, s3, w3, e3 = n2.north, s2.south, w2.west, e2.east
     n4, s4, w4, e4 = n3.north, s3.south, w3.west, e3.east
     n5, s5, w5, e5 = n4.north, s4.south, w4.west, e4.east
-    n6, s6, w6, e6 = n5.north, s5.south, w5.west, e5.east
-    n7, s7, w7, e7 = n6.north, s6.south, w6.west, e6.east
-    n8, s8, w8, e8 = n7.north, s7.south, w7.west, e7.east
-    n9, s9, w9, e9 = n8.north, s8.south, w8.west, e8.east
-    n10, s10, w10, e10 = n9.north, s9.south, w9.west, e9.east
+    # n6, s6, w6, e6 = n5.north, s5.south, w5.west, e5.east
+    # n7, s7, w7, e7 = n6.north, s6.south, w6.west, e6.east
+    # n8, s8, w8, e8 = n7.north, s7.south, w7.west, e7.east
+    # n9, s9, w9, e9 = n8.north, s8.south, w8.west, e8.east
+    # n10, s10, w10, e10 = n9.north, s9.south, w9.west, e9.east
 
     return {
         # 1 move away
@@ -559,46 +558,46 @@ def grid(cell):
         'EESS': e2.south.south, 'EENN': e2.north.north, 'WWNN': w2.north.north, 'WWSS': w2.south.south,
         'WWWS': w3.south, 'EEES': e3.south, 'EEEN': e3.north, 'WWWN': w3.north,
         'SSSW': s3.west, 'SSSE': s3.east, 'NNNE': n3.east, 'NNNW': n3.west,
-        # 5 moves away
-        'SSSSS': s5, 'NNNNN': n5, 'WWWWW': w5, 'EEEEE': e5,
-        'WWWWN': w4.north, 'WWWWS': w4.south, 'EEEEN': e4.north, 'EEEES': e4.south,
-        'SSSSE': s4.east, 'SSSSW': s4.west, 'NNNNW': n4.west, 'NNNNE': n4.east,
-        'EESSS': s3.east.east, 'WWSSS': s3.west.west, 'EENNN': n3.east.east, 'WWNNN': n3.west.west,
-        'EEESS': e3.south.south, 'EEENN': e3.north.north, 'WWWSS': w3.south.south, 'WWWNN': w3.north.north,
+        # # 5 moves away
+        # 'SSSSS': s5, 'NNNNN': n5, 'WWWWW': w5, 'EEEEE': e5,
+        # 'WWWWN': w4.north, 'WWWWS': w4.south, 'EEEEN': e4.north, 'EEEES': e4.south,
+        # 'SSSSE': s4.east, 'SSSSW': s4.west, 'NNNNW': n4.west, 'NNNNE': n4.east,
+        # 'EESSS': s3.east.east, 'WWSSS': s3.west.west, 'EENNN': n3.east.east, 'WWNNN': n3.west.west,
+        # 'EEESS': e3.south.south, 'EEENN': e3.north.north, 'WWWSS': w3.south.south, 'WWWNN': w3.north.north,
         # 6 moves away
-        'SSSSSS': s6, 'NNNNNN': n6, 'WWWWWW': w6, 'EEEEEE': e6,
-        'WWWWWN': w5.north, 'WWWWWS': w5.south, 'EEEEEN': e5.north, 'EEEEES': e5.south,
-        'SSSSSE': s5.east, 'SSSSSW': s5.west, 'NNNNNW': n5.west, 'NNNNNE': n5.east,
-        'WWWWNN': w4.north.north, 'WWWWSS': w4.south.south, 'EEEENN': e4.north.north, 'EEEESS': e4.south.south,
-        'NNNNEE': n4.east.east, 'NNNNWW': n4.west.west, 'SSSSWW': s4.west.west, 'SSSSEE': s4.east.east,
-        'EEENNN': e3.north.north.north, 'EEESSS': e3.south.south.south, 'WWWNNN': w3.north.north.north, 'WWWSSS': w3.south.south.south,
+        # 'SSSSSS': s6, 'NNNNNN': n6, 'WWWWWW': w6, 'EEEEEE': e6,
+        # 'WWWWWN': w5.north, 'WWWWWS': w5.south, 'EEEEEN': e5.north, 'EEEEES': e5.south,
+        # 'SSSSSE': s5.east, 'SSSSSW': s5.west, 'NNNNNW': n5.west, 'NNNNNE': n5.east,
+        # 'WWWWNN': w4.north.north, 'WWWWSS': w4.south.south, 'EEEENN': e4.north.north, 'EEEESS': e4.south.south,
+        # 'NNNNEE': n4.east.east, 'NNNNWW': n4.west.west, 'SSSSWW': s4.west.west, 'SSSSEE': s4.east.east,
+        # 'EEENNN': e3.north.north.north, 'EEESSS': e3.south.south.south, 'WWWNNN': w3.north.north.north, 'WWWSSS': w3.south.south.south,
         # 7 moves away
-        'SSSSSSS': s7, 'NNNNNNN': n7, 'WWWWWWW': w7, 'EEEEEEE': e7,
-        'WWWWWWN': w6.north, 'WWWWWWS': w6.south, 'EEEEEEN': e6.north, 'EEEEEES': e6.south,
-        'SSSSSSE': s6.east, 'SSSSSSW': s6.west, 'NNNNNNW': n6.west, 'NNNNNNE': n6.east,
-        'WWWWWNN': w5.north.north, 'WWWWWSS': w5.south.south, 'EEEEENN': e5.north.north, 'EEEEESS': e5.south.south,
-        'NNNNNWW': n5.west.west, 'NNNNNEE': n5.east.east, 'SSSSSWW': s5.west.west, 'SSSSSEE': s5.east.east,
-        'EEEENNN': e4.north.north.north, 'EEEESSS': e4.south.south.south, 'WWWWNNN': w4.north.north.north, 'WWWWSSS': w4.south.south.south,
-        'NNNNEEE': n4.east.east.east, 'NNNNWWW': n4.west.west.west, 'SSSSWWW': s4.west.west.west, 'SSSSEEE': s4.east.east.east,
-        # 8 moves away
-        'SSSSSSSS': s8, 'NNNNNNNN': n8, 'WWWWWWWW': w8, 'EEEEEEEE': e8,
-        'WWWWWWWN': w7.north, 'WWWWWWWS': w7.south, 'EEEEEEEN': e7.north, 'EEEEEEES': e7.south,
-        'SSSSSSSE': s7.east, 'SSSSSSSW': s7.west, 'NNNNNNNW': n7.west, 'NNNNNNNE': n7.east,
-        'WWWWWWNN': w6.north.north, 'WWWWWWWSS': w6.south.south, 'EEEEEEENN': e6.north.north, 'EEEEEEESS': e6.south.south,
-        'NNNNNNWW': n6.west.west, 'NNNNNNEE': n6.east.east, 'SSSSSSWW': s6.west.west, 'SSSSSSEE': s6.west.west,
-        'NNNNNWWW': n5.west.west.west, 'NNNNNEEE': n5.east.east.east, 'SSSSSWWW': s5.west.west.west, 'SSSSSEEE':  s5.east.east.east,
-        'EEEEENNN': e5.north.north.north, 'EEEEESSS': e5.south.south.south, 'WWWWWNNN': w5.north.north.north, 'WWWWWSSS': w5.south.south.south,
-        'EEEENNNN': e4.north.north.north.north, 'WWWWNNNN': w4.north.north.north.north, 'EEEESSSS': e4.south.south.south.south, 'WWWWSSSS': w4.south.south.south.south,
-        # 9 moves away
-        'SSSSSSSS': s9, 'NNNNNNNN': n9, 'WWWWWWWW': w9, 'EEEEEEEE': e9,
-        'WWWWWWWWN': w8.north, 'WWWWWWWWS': w8.south, 'EEEEEEEEN': e8.north, 'EEEEEEEES': e8.south,
-        'SSSSSSSSE': s8.east, 'SSSSSSSSW': s8.west, 'NNNNNNNNW': n8.west, 'NNNNNNNNE': n8.east,
-        'NNNNNNNEE': n7.east.east, 'NNNNNNNWW': n7.west.west, 'SSSSSSSEE': s7.east.east, 'SSSSSSSWW': s7.west.west,
-        'EEEEEEENN': e7.north.north, 'EEEEEEESS': e7.south.south, 'WWWWWWWNN': w7.north.north, 'WWWWWWWSS': w7.south.south,
-        'NNNNNNWWW': n6.west.west.west, 'NNNNNNEEE': n6.east.east.east, 'SSSSSSWWW': s6.west.west.west, 'SSSSSSEEE': s6.east.east.east,
-        'EEEEEENNN': e6.north.north.north, 'EEEEEESSS': e6.south.south.south, 'WWWWWWNNN': w6.north.north.north, 'WWWWWWSSS': w6.south.south.south,
-        'NNNNNWWWW': n5.west.west.west.west, 'NNNNNEEEE': n5.east.east.east.east, 'SSSSSWWWW': s5.west.west.west.west, 'SSSSSEEEE':  s5.east.east.east.east,
-        'EEEEENNNN': e5.north.north.north.north, 'EEEEESSSS': e5.south.south.south.south, 'WWWWWNNNN': w5.north.north.north.north, 'WWWWWSSSS': w5.south.south.south.south,
+        # 'SSSSSSS': s7, 'NNNNNNN': n7, 'WWWWWWW': w7, 'EEEEEEE': e7,
+        # 'WWWWWWN': w6.north, 'WWWWWWS': w6.south, 'EEEEEEN': e6.north, 'EEEEEES': e6.south,
+        # 'SSSSSSE': s6.east, 'SSSSSSW': s6.west, 'NNNNNNW': n6.west, 'NNNNNNE': n6.east,
+        # 'WWWWWNN': w5.north.north, 'WWWWWSS': w5.south.south, 'EEEEENN': e5.north.north, 'EEEEESS': e5.south.south,
+        # 'NNNNNWW': n5.west.west, 'NNNNNEE': n5.east.east, 'SSSSSWW': s5.west.west, 'SSSSSEE': s5.east.east,
+        # 'EEEENNN': e4.north.north.north, 'EEEESSS': e4.south.south.south, 'WWWWNNN': w4.north.north.north, 'WWWWSSS': w4.south.south.south,
+        # 'NNNNEEE': n4.east.east.east, 'NNNNWWW': n4.west.west.west, 'SSSSWWW': s4.west.west.west, 'SSSSEEE': s4.east.east.east,
+        # # 8 moves away
+        # 'SSSSSSSS': s8, 'NNNNNNNN': n8, 'WWWWWWWW': w8, 'EEEEEEEE': e8,
+        # 'WWWWWWWN': w7.north, 'WWWWWWWS': w7.south, 'EEEEEEEN': e7.north, 'EEEEEEES': e7.south,
+        # 'SSSSSSSE': s7.east, 'SSSSSSSW': s7.west, 'NNNNNNNW': n7.west, 'NNNNNNNE': n7.east,
+        # 'WWWWWWNN': w6.north.north, 'WWWWWWWSS': w6.south.south, 'EEEEEEENN': e6.north.north, 'EEEEEEESS': e6.south.south,
+        # 'NNNNNNWW': n6.west.west, 'NNNNNNEE': n6.east.east, 'SSSSSSWW': s6.west.west, 'SSSSSSEE': s6.west.west,
+        # 'NNNNNWWW': n5.west.west.west, 'NNNNNEEE': n5.east.east.east, 'SSSSSWWW': s5.west.west.west, 'SSSSSEEE':  s5.east.east.east,
+        # 'EEEEENNN': e5.north.north.north, 'EEEEESSS': e5.south.south.south, 'WWWWWNNN': w5.north.north.north, 'WWWWWSSS': w5.south.south.south,
+        # 'EEEENNNN': e4.north.north.north.north, 'WWWWNNNN': w4.north.north.north.north, 'EEEESSSS': e4.south.south.south.south, 'WWWWSSSS': w4.south.south.south.south,
+        # # 9 moves away
+        # 'SSSSSSSS': s9, 'NNNNNNNN': n9, 'WWWWWWWW': w9, 'EEEEEEEE': e9,
+        # 'WWWWWWWWN': w8.north, 'WWWWWWWWS': w8.south, 'EEEEEEEEN': e8.north, 'EEEEEEEES': e8.south,
+        # 'SSSSSSSSE': s8.east, 'SSSSSSSSW': s8.west, 'NNNNNNNNW': n8.west, 'NNNNNNNNE': n8.east,
+        # 'NNNNNNNEE': n7.east.east, 'NNNNNNNWW': n7.west.west, 'SSSSSSSEE': s7.east.east, 'SSSSSSSWW': s7.west.west,
+        # 'EEEEEEENN': e7.north.north, 'EEEEEEESS': e7.south.south, 'WWWWWWWNN': w7.north.north, 'WWWWWWWSS': w7.south.south,
+        # 'NNNNNNWWW': n6.west.west.west, 'NNNNNNEEE': n6.east.east.east, 'SSSSSSWWW': s6.west.west.west, 'SSSSSSEEE': s6.east.east.east,
+        # 'EEEEEENNN': e6.north.north.north, 'EEEEEESSS': e6.south.south.south, 'WWWWWWNNN': w6.north.north.north, 'WWWWWWSSS': w6.south.south.south,
+        # 'NNNNNWWWW': n5.west.west.west.west, 'NNNNNEEEE': n5.east.east.east.east, 'SSSSSWWWW': s5.west.west.west.west, 'SSSSSEEEE':  s5.east.east.east.east,
+        # 'EEEEENNNN': e5.north.north.north.north, 'EEEEESSSS': e5.south.south.south.south, 'WWWWWNNNN': w5.north.north.north.north, 'WWWWWSSSS': w5.south.south.south.south,
     }
 
 
@@ -629,7 +628,7 @@ def agent(obs, config):
 
     # It would be absurd to log when I am out of the game
     if not(len(board.current_player.ships) == 0 and board.current_player.halite < 500):
-        log(str(step + 1) + '|-------------------------------------------------------')
+        log(str(step + 1) + '|-----------------------------------------------------------------------')
 
     for ship_id in board.current_player.ship_ids:
         if ship_id in board.current_player.ship_ids:
@@ -642,8 +641,8 @@ def agent(obs, config):
                 board.ships[ship_id].next_action = next_action
                     
             board = board.next()
-        else:
-            log(' Not found')
+        # else:
+        #     log(' Not found')
 
     shipyard_ids = ShipyardDecisions(board, board.current_player, step).determine()
 
