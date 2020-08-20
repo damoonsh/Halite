@@ -51,3 +51,6 @@ Note: No need to add the other cell with more than 6 moves for now, let's work o
    - Use a while loop at agent for the ships
    - When hitting a ship, move it in opposite direction
    - There is something wrong with update process of the board at each iteration
+   - Adding other agents to figure out why it is breaking
+   - Sort the ships based on their cargo and then start processing them in order
+   - Add excludes moves to the decision process

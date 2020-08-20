@@ -86,7 +86,7 @@ class DecisionShip:
     def weight_convert(self, base_threshold=600):
         """ Weights the option for ship conversion. """
         # Calculating the threshhold
-        threshold = base_threshold + 500 * (len(self.player.shipyards) // 3)
+        threshold = base_threshold + 1000 * (len(self.player.shipyards) // 3)
         
         # 1. If they are no shipyards left
         no_shipyards = len(self.player.shipyards) == 0
@@ -95,10 +95,13 @@ class DecisionShip:
         # 3. On shipyard already
         on_shipyard = self.ship.cell.shipyard is not None
 
-        if no_shipyards and not on_shipyard:
-            self.weights['convert'] = 1e4
-        elif self.Shipyards[self.closest_shipyard_id]['moves'] < 10 and not on_shipyard:
-            self.weights['convert'] = (self.ship_cargo - threshold) * 40
+        if self.player.halite > 500:
+            if no_shipyards and not on_shipyard:
+                self.weights['convert'] = 1e4
+            elif self.Shipyards[self.closest_shipyard_id]['moves'] < 10 and not on_shipyard:
+                self.weights['convert'] = (self.ship_cargo - threshold) * 60
+            else:
+                self.eliminated_moves.append('convert')
         else:
             self.eliminated_moves.append('convert')
 
@@ -134,6 +137,7 @@ class DecisionShip:
             Ship_id = self.grid[direction]['ship_id']
             Shipyard_id = self.grid[direction]['shipyard_id']
 
+
             # 1. Evaluate the moves based on other objects present in the map
             # 1.1 If there was a ship
             if not pd.isna(Ship_id):
@@ -150,10 +154,7 @@ class DecisionShip:
                         # Go to the closest shipyard preferably
                         self.go_to_closest_shipyard(self.ship_cargo ** 3)
                     else:
-                        # This part has been change and one more check could be helpful
-                        if pd.isna(Shipyard_id):
-                            if self.grid[direction].my_shipyard != 1:
-                                self.deal_enemy_ship(Ship_id)
+                        self.deal_enemy_ship(Ship_id)
 
             # 1.2 If there was a shipyard
             if not pd.isna(Shipyard_id):
@@ -163,15 +164,16 @@ class DecisionShip:
                     self.attack_enemy_shipyard(Shipyard_id)
 
             # 2. Trigger movement in the main four direction solely based on the amount of halite each cell has
-            main_dir_encourage = 10 * self.grid[direction].halite
+            main_dir_encourage = 8 * self.grid[direction].halite ** 1.2
             self.add_accordingly(main_dir_encourage, title='  main4: ', loging=False)
 
             # 3. Either encourage mining or discourage it by adding the difference between cells to the mine
-            mining_trigger = 10 * (self.current_cell.halite - self.grid[direction].halite) / self.grid[direction].moves
+            mining_trigger = 5 * (self.current_cell.halite - self.grid[direction].halite + 10) / self.grid[direction].moves
+
             self.weights['mine'] += mining_trigger
 
         # The correlation of the mining with cell's halite
-        self.weights['mine'] += self.current_cell.halite ** 2
+        self.weights['mine'] += self.current_cell.halite ** 2.5
         # log('  Mining-enc: ' + str(round(self.current_cell.halite ** 2, 2)))
 
     def distribute_ships(self, ship_id):
@@ -184,7 +186,7 @@ class DecisionShip:
         """ This function will evaluate to either attack or get_away from an enemy ship based on the 
         simple observation: If my ship had more cargo then I should not attack. """
         # If the ship's cargo was more than enemy's cargo and it was not equal to zero then get away otherwise attack
-        if self.ship_cargo > self.Ships[ship_id].cargo + 0.25 * self.grid[self.current_direction]['halite'] and self.ship_cargo != 0:
+        if self.ship_cargo > self.Ships[ship_id].cargo + 0.4 * self.grid[self.current_direction]['halite'] and self.ship_cargo != 0:
             self.get_away(cargo_diff=abs(self.Ships[ship_id].cargo - self.ship_cargo))
         else:
             self.attack_enemy_ship(self.Ships[ship_id].cargo - self.ship_cargo)
@@ -193,6 +195,41 @@ class DecisionShip:
         """ This function encourages attacking the enemy ship """
         attack_encouragement = 10 * (diff + 1) ** 2 / (self.closest_shipyard_distance + 0.1)
         self.add_accordingly(attack_encouragement, title='Attacking-Enemy-Ship', loging=False)
+        
+        # If the enemy ship was one move away then update it so the other ships could see it 
+        if len(self.current_direction) == 1:
+            pass
+
+    # def enemy_ship_runaway(self, enemy_ship_id):
+    #     cell = self.board.ships[enemy_ship_id].cell
+    #     base_value, preferred_dir = -1e4, ""
+
+    #     for Dir, adj_cell in {"N": cell.north, "S": cell.south, "E": cell.east, "W": cell.west}.items():
+    #         weight_adj = cell.north, cell.south, cell.east, cell.west
+            
+    #         if weight_adj > base_value or preferred_dir == "": base_value, preferred_dir = weight_adj, Dir
+
+
+    # @staticmethod
+    # def weight_enemy_tendency(cell, main_cell):
+        
+    #     value = 0
+    #     if cell.ship is not None:
+    #         if cell.ship.id in main_cell.ship.player.ship_ids:
+    #             value -= 1e3
+    #         else:
+    #             value += 10 * (main_cell.ship.halite - cell.ship.halite + 3)
+
+    #     if cell.shipyard is not None:
+    #         if cell.shipyard_id in main_cell.ship.player.shipyard_ids:
+    #             value += main_cell.ship.halite
+    #         else:
+    #             value += 10
+
+    #     value += cell.halite * 5
+        
+
+    #     return value
 
     def get_away(self, cargo_diff=0):
         """ This function is called when my ship needs to get away from a ship which might be following it """
@@ -211,9 +248,9 @@ class DecisionShip:
     def deposit(self):
         """ Weights the tendency to deposit and adds to the directions which lead to the given shipyard """
         if self.near_end():
-            deposit_tendency = self.ship_cargo ** 2
+            deposit_tendency = self.ship_cargo ** 4
         else:
-            deposit_tendency = 10 * self.ship_cargo ** 1.2
+            deposit_tendency = 10 * self.ship_cargo ** (1.2 + 2 * self.step // 390)
         self.add_accordingly(deposit_tendency, title='Deposit', loging=False)
 
     def attack_enemy_shipyard(self, shipyard_id):
@@ -254,7 +291,7 @@ class DecisionShip:
                 if shipyard_grid[direction].my_ship == 1:
                     value += -1e4 / shipyard_grid[direction]['moves'] ** 2
                 else:
-                    value += 1.5e4 / shipyard_grid[direction]['moves'] ** 2
+                    value += 1e4 / shipyard_grid[direction]['moves'] ** 2
 
         if value > 0:
             # More concenteration on the closest shipyard
@@ -323,6 +360,7 @@ class ShipyardDecisions:
         self.weight_shipyard_tendencies()
         sorted_weights = {k: v for k, v in
                           sorted(self.shipyard_tendencies.items(), key=lambda item: item[1], reverse=True)}
+        log(' Shipyard weights: ' + str(sorted_weights))
         shipyard_ids = []
         for shipyard_id, tendency in sorted_weights.items():
             if tendency > 0 and self.player_halite >= 500:
@@ -351,7 +389,7 @@ class ShipyardDecisions:
         """
         if len(self.board.current_player.ships) == 0:
             return 10
-        if self.step < 40 and self.player_halite > 500 + 500 * (self.step // 50):
+        if self.step < 70 and self.player_halite > 500 + 500 * (self.step // 50):
             return 10
 
         value = 0
@@ -359,7 +397,7 @@ class ShipyardDecisions:
         for direction in grid.columns:
             if not pd.isna(grid[direction].ship_id):
                 if grid[direction].my_ship == 1:
-                    value -= 150 / grid[direction]['moves']
+                    value -= 100 / grid[direction]['moves']
                 else:
                     value += 100 / grid[direction]['moves']
                     # If there was an enemy ship one move away from my shipyard then spawn
@@ -370,7 +408,7 @@ class ShipyardDecisions:
                 if grid[direction].my_shipyard == 0:
                     value += 200 / grid[direction]['moves']
 
-        return value
+        return round(value, 2)
 
 
 class Locator:
@@ -461,12 +499,10 @@ class Locator:
                 base_info['movesX'] = direction.count("E")
 
             if base_info['dirY'] != 'None':
-                relative = 1 / (len(direction) ** 2 * base_info['movesY']) 
-                base_info['weightY'] =  relative
+                base_info['weightY'] = 1 / (len(direction) ** 2 * base_info['movesY']) 
 
             if base_info['dirX'] != 'None':
-                relative = 1 / (len(direction) ** 2 * base_info['movesX']) 
-                base_info['weightX'] = relative
+                base_info['weightX'] = 1 / (len(direction) ** 2 * base_info['movesX']) 
 
             if cell.ship is not None:
                 base_info["ship_id"] = cell.ship.id
@@ -616,7 +652,7 @@ log('logs:', 0)
 
 movement_dictionary = {"S": "SOUTH", 'N': 'NORTH', 'W': 'WEST', 'E': 'EAST', 'convert': 'CONVERT'}
 
-
+import operator
 def agent(obs, config):
     # Another for updates
     board = Board(obs, config)
@@ -624,13 +660,14 @@ def agent(obs, config):
     # Step of the board
     step = board.observation['step']
 
+    ships = [ship.id for ship in sorted(board.current_player.ships, key=operator.attrgetter("halite"), reverse=True)]
     actions = {}
 
     # It would be absurd to log when I am out of the game
     if not(len(board.current_player.ships) == 0 and board.current_player.halite < 500):
         log(str(step + 1) + '|-----------------------------------------------------------------------')
 
-    for ship_id in board.current_player.ship_ids:
+    for ship_id in ships:
         if ship_id in board.current_player.ship_ids:
             log(' Pos:' + str(board.ships[ship_id].position) + ', cargo: ' + str(board.ships[ship_id].halite) + ', player halite: ' + str(board.current_player.halite))
                 
