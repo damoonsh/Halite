@@ -82,7 +82,7 @@ class DecisionShip:
 
         if weightX != 0: self.weights[dirX] += value * weightX
         if weightY != 0: self.weights[dirY] += value * weightY
-    # Add the relation with the amount of halite on the cell
+        
     def weight_convert(self, base_threshold=600):
         """ Weights the option for ship conversion. """
         # Calculating the threshhold
@@ -95,7 +95,7 @@ class DecisionShip:
         # 3. On shipyard already
         on_shipyard = self.ship.cell.shipyard is not None
 
-        if self.player.halite > 500:
+        if self.player.halite + self.ship.halite >= 500:
             if no_shipyards and not on_shipyard:
                 self.weights['convert'] = 1e4
             elif self.Shipyards[self.closest_shipyard_id]['moves'] < 10 and not on_shipyard:
@@ -164,7 +164,7 @@ class DecisionShip:
                     self.attack_enemy_shipyard(Shipyard_id)
 
             # 2. Trigger movement in the main four direction solely based on the amount of halite each cell has
-            main_dir_encourage = 8 * self.grid[direction].halite ** 1.2
+            main_dir_encourage = 10 * self.grid[direction].halite ** 1.2
             self.add_accordingly(main_dir_encourage, title='  main4: ', loging=False)
 
             # 3. Either encourage mining or discourage it by adding the difference between cells to the mine
@@ -173,7 +173,7 @@ class DecisionShip:
             self.weights['mine'] += mining_trigger
 
         # The correlation of the mining with cell's halite
-        self.weights['mine'] += self.current_cell.halite ** 2.5
+        self.weights['mine'] += self.current_cell.halite ** 2
         # log('  Mining-enc: ' + str(round(self.current_cell.halite ** 2, 2)))
 
     def distribute_ships(self, ship_id):
@@ -189,7 +189,7 @@ class DecisionShip:
         if self.ship_cargo > self.Ships[ship_id].cargo + 0.4 * self.grid[self.current_direction]['halite'] and self.ship_cargo != 0:
             self.get_away(cargo_diff=abs(self.Ships[ship_id].cargo - self.ship_cargo))
         else:
-            self.attack_enemy_ship(self.Ships[ship_id].cargo - self.ship_cargo)
+            self.attack_enemy_ship(abs(self.Ships[ship_id].cargo - self.ship_cargo))
 
     def attack_enemy_ship(self, diff):
         """ This function encourages attacking the enemy ship """
@@ -248,9 +248,9 @@ class DecisionShip:
     def deposit(self):
         """ Weights the tendency to deposit and adds to the directions which lead to the given shipyard """
         if self.near_end():
-            deposit_tendency = self.ship_cargo ** 4
+            deposit_tendency = self.ship_cargo ** 3
         else:
-            deposit_tendency = 10 * self.ship_cargo ** (1.2 + 2 * self.step // 390)
+            deposit_tendency = 10 * self.ship_cargo ** (1.2 + 0.6 * self.step // 380 + 1 * self.step // 390)
         self.add_accordingly(deposit_tendency, title='Deposit', loging=False)
 
     def attack_enemy_shipyard(self, shipyard_id):
@@ -389,7 +389,7 @@ class ShipyardDecisions:
         """
         if len(self.board.current_player.ships) == 0:
             return 10
-        if self.step < 70 and self.player_halite > 500 + 500 * (self.step // 50):
+        if self.step < 70 and self.player_halite >= 500:
             return 10
 
         value = 0
