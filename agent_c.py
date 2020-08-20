@@ -21,10 +21,10 @@ class Decesion_Ship:
         if len(self.player.shipyards) == 0:
             return self.moves['convert']
         
-        if (self.step >= 395 or self.near_end()) and self.ship.halite > 500:
+        if self.step > 393 and self.ship.halite > 500:
             return self.moves['convert']
 
-        if self.ship.halite > 1500:
+        if self.ship.halite > 2500:
             return self.moves['convert']  
         
         weights = self.weight_moves()
@@ -62,7 +62,7 @@ class Decesion_Ship:
                 for index in  range(2, 5):
                     for sub_Dir, sub_cell in self.grid[str(index)].items():
                         if Dir in sub_Dir:
-                            weights[Dir] += self.weight_cell(sub_cell) 
+                            weights[Dir] += self.weight_cell(sub_cell)
                             
         return weights
                     
@@ -125,18 +125,7 @@ class Decesion_Ship:
         
         return round(w, 3)
                     
-    def near_end(self):
-        """ This function is intended to determine if the game is about to end so the ships with halite can
-        convert to shipyard and maximum the halite we will end up with. """
-        count = 0
         
-        # If the halite was less than 500 and it had no ships
-        for opp in self.board.opponents:
-            if opp.halite < 500 and len(opp.ships) == 0 and self.player.halite > opp.halite: count += 1
-            if opp.halite > 1500 and len(opp.ships) > 1: count -= 1
-                
-        # If count was more than 2 return True
-        return count >= 2
     
     def grid_5(self):
         """
@@ -232,7 +221,7 @@ def agent(obs, config):
             if len(me.ships) == 0:
                 shipyard.next_action = acts['spawn']
 
-            if step < 150 and step % 3 == 1:
+            if step < 100 and step % 3 == 1:
                 shipyard.next_action = acts['spawn']
 
             if step > 200 and me.halite > 10000 + len(me.ships) * 1000:

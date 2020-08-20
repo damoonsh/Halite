@@ -27,6 +27,9 @@ class Decesion_Ship:
             return self.moves['convert']  
         
         weights = self.weight_moves()
+
+        # sorted_weights = {k: v for k, v in sorted(weights.items(), key=lambda item: item[1], reverse=True)}
+        # log('  -> weights: ' + str(sorted_weights))
         
         if len(weights) > 0:
             max_move = max(weights, key=weights.get)
@@ -210,7 +213,7 @@ def log(text, step=1):
             text = str(text) + '\n'
             text_file.write(text)
 
-# log('logs:', 1)
+# log('logs:', 0)
 
 def agent(obs, config):
     # Make the board
@@ -231,7 +234,7 @@ def agent(obs, config):
         
         new_board = board.next()
     
-    #Implemenet a pipeline where given that
+    #Implement a pipeline where given that
     for shipyard in me.shipyards:
         # If there were no ships on the yard
         if new_board.shipyards[shipyard.id].cell.ship == None and step < 392:
