@@ -27,25 +27,18 @@ class DecisionShip:
         # All moves ship can take
         self.moves = {"N": ShipAction.NORTH, 'S': ShipAction.SOUTH, 'W': ShipAction.WEST,
                       'E': ShipAction.EAST, 'convert': ShipAction.CONVERT, 'mine': None}
-
         # The list of moves that should not be taken
         self.eliminated_moves = ['None']
-
         # Weights of different moves
         self.weights = {"N": 0, "E": 0, "W": 0, "S": 0, "mine": 0, "convert": 0, 'None': 0}
-
         # The cells around the main one
         self.grid = grid(self.ship.cell)
-
-        # Closest shipyard id
+        # Closest shipyard id and the distance
         self.closest_shipyard_id, self.closest_shipyard_distance = self.closest_shipyard()
-
         # Default move which is set to mining (None)
         self.next_move = None
-
         # This variable holds info on the cell being analyzed
         self.current = {}
-
         # Setting the hyper parameters
         self.set_hyperparameters()
 
@@ -82,7 +75,7 @@ class DecisionShip:
 
     def add_accordingly(self, value, title="", loging=False):
         """ Adds a value to directions according to their corresponding weights """
-        weightX, weightY, dirX, dirY = 0, 0, "", ""
+        weightX, weightY, dirX, dirY, movesX, movesY = 0, 0, "", "", 0, 0
 
         if "N" in self.current['dir']:
             dirY, movesY = 'N', self.current['dir'].count("N")
@@ -99,7 +92,7 @@ class DecisionShip:
             weightX = 1 / (len(self.current['dir']) ** 2 * movesX)
 
         if value != 0 and loging:
-            log('   ' + title + ', adding ' + str(round(value * weightX, 3)) + ' to ' + dirX + ', moves: ' + str(self.grid[self.current_direction]['movesX']) + ' and ' + str(round(value * weightY, 2)) + ' to ' + dirY + ", moves: " + str(self.grid[self.current_direction]['movesY']))
+            log('   ' + title + ', adding ' + str(round(value * weightX, 3)) + ' to ' + dirX + ', moves: ' + str(movesX) + ' and ' + str(round(value * weightY, 2)) + ' to ' + dirY + ", moves: " + str(movesY))
 
         if weightX != 0: self.weights[dirX] += value * weightX
         if weightY != 0: self.weights[dirY] += value * weightY
@@ -147,6 +140,7 @@ class DecisionShip:
             if cell.ship is not None:
                 # If it was my ship
                 if cell.ship in self.player.ship_ids:
+                    log(' my ship')
                     self.distribute_ships(cell.ship_id)
                 else:
                     self.deal_enemy_ship(cell.ship_id)
@@ -173,6 +167,10 @@ class DecisionShip:
 
     def distribute_ships(self, ship_id):
         """ This function lowers the ships tendency to densely populate an area """
+        log(' len:' + str(len(self.current['dir'])))
+        if len(self.current['dir']) == 1:
+            self.eliminated_moves.append(self.current['dir'])
+
         distribution_encouragement = -10 * abs(self.ship_cargo - self.board.ships[ship_id])
 
         self.add_accordingly(distribution_encouragement, title='Distribution', loging=False)
@@ -181,10 +179,10 @@ class DecisionShip:
         """ This function will evaluate to either attack or get_away from an enemy ship based on the 
         simple observation: If my ship had more cargo then I should not attack. """
         # If the ship's cargo was more than enemy's cargo and it was not equal to zero then get away otherwise attack
-        if self.ship_cargo > (self.board[ship_id].halite + 0.4 * self.current['cell'].halite) and self.ship_cargo != 0:
-            self.get_away(cargo_diff=abs(self.board[ship_id].halite - self.ship_cargo))
+        if self.ship_cargo > (self.board.ships[ship_id].halite + 0.4 * self.current['cell'].halite) and self.ship_cargo != 0:
+            self.get_away(cargo_diff=abs(self.board.ships[ship_id].halite - self.ship_cargo))
         else:
-            self.attack_enemy_ship(abs(self.board[ship_id].halite - self.ship_cargo))
+            self.attack_enemy_ship(abs(self.board.ships[ship_id].halite - self.ship_cargo))
 
     def attack_enemy_ship(self, diff):
         """ This function encourages attacking the enemy ship """
@@ -192,8 +190,8 @@ class DecisionShip:
         self.add_accordingly(attack_encouragement, title='Attacking-Enemy-Ship', loging=False)
         
         # If the enemy ship was one move away then update it so the other ships could see it 
-        if len(self.current_direction) == 1:
-            pass
+        # if len(self.current['dir']) == 1:
+            # pass
 
     # def enemy_ship_runaway(self, enemy_ship_id):
     #     cell = self.board.ships[enemy_ship_id].cell
@@ -226,7 +224,7 @@ class DecisionShip:
     def get_away(self, cargo_diff=0):
         """ This function is called when my ship needs to get away from a ship which might be following it """
         # 1. Directly discouraging the movement
-        if len(self.current_direction) == 2:
+        if len(self.current['dir']) == 2:
             # When the enemy ship is two moves away, there should be a strong discouragement
             direction_discouragement = -150 * (self.ship.halite  + 10)
         else:
@@ -234,7 +232,7 @@ class DecisionShip:
         self.add_accordingly(direction_discouragement, title='Get-Away', loging=False)
 
         # 2. Encouraging going to the closest shipyard
-        closest_shipyard_encouragement = cargo_diff / self.grid[self.current_direction]['moves']
+        closest_shipyard_encouragement = cargo_diff
         self.go_to_closest_shipyard(closest_shipyard_encouragement)
 
     def deposit(self):
@@ -255,13 +253,18 @@ class DecisionShip:
 
     def go_to_closest_shipyard(self, value):
         """ Encourage movement towards the nearest shipyard """
-        if self.closest_shipyard_id != 0:
-            dirX, dirY = self.Shipyards[self.closest_shipyard_id]['dirX'], self.Shipyards[self.closest_shipyard_id]['dirY']
-            
-            self.weights[dirX] += value
-            self.weights[dirY] += value
+        if self.closest_shipyard_id != 0.99: # Given that there is a closest shipyard
+            (x, y) = self.board.shipyards[self.closest_shipyard_id].position
 
-            # log('   Shipyard: ' + str(self.board.shipyards[self.closest_shipyard_id].position) + ', adding ' + str(round(value, 3)) + ' to ' + dirX + ' and ' + dirY)
+            if x > self.current_cell.position.x:
+                self.weights['E'] += value
+            elif x < self.current_cell.position.x:
+                self.weights['W'] += value
+
+            if y > self.current_cell.position.y:
+                self.weights['N'] += value
+            elif y < self.current_cell.position.y:
+                self.weights['S'] += value
 
     def shipyard_status(self):
         """ Measures tendency for the shipyards within the map """
@@ -285,9 +288,22 @@ class DecisionShip:
 
         # Don't discourage any move toward a shipyards
         if value > 0:
-            self.add_accordingly(value, title='   shipyard-analysis', loging=True)
-            # log('  Shipyard status: ' + str(shipyard.position) + ', adding: ' + str(round(value, 3)) + ' to ' + dirX + ', ' + dirY)
-        
+            currentDir = ""
+
+            if shipyard.position.x > self.current_position.x:
+                currentDir += "E" * abs(shipyard.position.x - self.current_position.x)
+            elif shipyard.position.x < self.current_position.x:
+                currentDir += "W" * abs(shipyard.position.x - self.current_position.x)
+
+            if shipyard.position.y > self.current_position.y:
+                currentDir += "S" * abs(shipyard.position.y - self.current_position.y)
+            elif shipyard.position.y < self.current_position.y:
+                currentDir += "N" * abs(shipyard.position.y - self.current_position.y)
+
+            if currentDir != "":
+                self.current['dir'] = currentDir
+                self.add_accordingly(value, title='  Yard-sur', loging=True)
+
     def closest_shipyard(self):
         """ Returns the closest shipyard's id """
         closest_id, diff = 0.99, 0.99
@@ -365,8 +381,7 @@ class ShipyardDecisions:
         for shipyard in self.Shipyards:
             # Weighting will take place only when there are no ships on the cell
             if shipyard.cell.ship is None:
-                Grid = grid(shipyard.cell)
-                weight = self.weight(Grid)
+                weight = self.weight(grid(shipyard.cell))
 
                 self.shipyard_tendencies[shipyard.id] = weight
 
@@ -387,7 +402,7 @@ class ShipyardDecisions:
         # Iterating through the grid
         for direction, cell in grid.items():
             if cell.ship is not None:
-                if grid[direction].my_ship == 1:
+                if cell.ship.id in self.player.ship_ids:
                     value -= 120 / len(direction)
                 else:
                     value += 100 / len(direction)
@@ -397,7 +412,7 @@ class ShipyardDecisions:
 
             if cell.shipyard is not None:
                 if cell.shipyard.id in self.player.shipyard_ids:
-                    value += 200 / grid[direction]['moves']
+                    value += 200 / len(self.current['dir'])
 
         return round(value, 2)
 
