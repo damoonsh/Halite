@@ -61,3 +61,5 @@ Note: No need to add the other cell with more than 6 moves for now, let's work o
    - Bring down the value of weights
    - For mining, 1/4 of the halite will be mined so let's take that into account while trying to decrease the weight numbers
    - Maybe rewrite the whole thing without locator object
+   - ***Instead of using board.next(), only update specific details for higher accuracy
+   - come up with equations for each of the hyperparameters

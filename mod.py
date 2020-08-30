@@ -44,13 +44,13 @@ class DecisionShip:
 
     def set_hyperparameters(self):
         """ Initializes the hyperparameters that will affect the decision process """
-        self.MINING = 500
-        self.DEPOSIT = 800
+        self.MINING = 300 + (self.step // 80) * 75
+        self.DEPOSIT = 800 + self.step // 300 * 300 + self.step // 380 * 800
         self.ATTACK_ENEMY_SHIP = 400
         self.ATTACK_ENEMY_SHIPYARD = 200
-        self.DIRECTION_ENCOURAGEMENT = 5
+        self.DIRECTION_ENCOURAGEMENT = 80 - (self.step // 50) * 10 - (self.step // 300) * 20 
         self.DISTRIBUTION = -10
-        self.GET_AWAY = -500
+        self.GET_AWAY = -50
         self.CLOSEST_SHIPYARD = 500
         self.CONVERSION = 50
         self.CARGO_THRESHHOLD = 600
@@ -112,7 +112,7 @@ class DecisionShip:
 
         if self.player.halite + self.ship.halite >= 500:
             if no_shipyards and not on_shipyard:
-                self.weights['convert'] = 1e4
+                self.weights['convert'] = 1e6
             elif not on_shipyard:
                 self.weights['convert'] = (self.ship_cargo - threshold) * 60
             elif on_shipyard:
@@ -139,21 +139,20 @@ class DecisionShip:
             # 1.1 If there was a ship
             if cell.ship is not None:
                 # If it was my ship
-                if cell.ship in self.player.ship_ids:
-                    log(' my ship')
+                if cell.ship.id in self.player.ship_ids:
                     self.distribute_ships(cell.ship_id)
                 else:
                     self.deal_enemy_ship(cell.ship_id)
 
             # 1.2 If there was a shipyard
             if cell.shipyard is not None:
-                if cell.shipyard in self.player.shipyard_ids:
+                if cell.shipyard.id in self.player.shipyard_ids:
                     self.deposit()
                 else:
                     self.attack_enemy_shipyard(cell.shipyard_id)
 
             # 2. Trigger movement in the main four direction solely based on the amount of halite each cell has
-            main_dir_encourage = 5 * self.grid[direction].halite + 10
+            main_dir_encourage = self.DIRECTION_ENCOURAGEMENT * self.grid[direction].halite + 10
             self.add_accordingly(main_dir_encourage, title='  main4: ', loging=False)
 
             # 3. Either encourage mining or discourage it by adding the difference between cells to the mine
@@ -162,16 +161,14 @@ class DecisionShip:
             self.weights['mine'] += mining_trigger
 
         # The correlation of the mining with cell's halite
-        self.weights['mine'] += self.current_cell.halite * 500
+        self.weights['mine'] += self.current_cell.halite * self.MINING
         # log('  Mining-enc: ' + str(round(self.current_cell.halite ** 2, 2)))
 
     def distribute_ships(self, ship_id):
         """ This function lowers the ships tendency to densely populate an area """
-        log(' len:' + str(len(self.current['dir'])))
-        if len(self.current['dir']) == 1:
-            self.eliminated_moves.append(self.current['dir'])
+        if len(self.current['dir']) == 1: self.eliminated_moves.append(self.current['dir'])
 
-        distribution_encouragement = -10 * abs(self.ship_cargo - self.board.ships[ship_id])
+        distribution_encouragement = -10 * abs(self.ship_cargo - self.board.ships[ship_id].halite)
 
         self.add_accordingly(distribution_encouragement, title='Distribution', loging=False)
 
@@ -179,14 +176,14 @@ class DecisionShip:
         """ This function will evaluate to either attack or get_away from an enemy ship based on the 
         simple observation: If my ship had more cargo then I should not attack. """
         # If the ship's cargo was more than enemy's cargo and it was not equal to zero then get away otherwise attack
-        if self.ship_cargo > (self.board.ships[ship_id].halite + 0.4 * self.current['cell'].halite) and self.ship_cargo != 0:
+        if self.ship_cargo > (self.board.ships[ship_id].halite + 0.4 * self.current['cell'].halite):
             self.get_away(cargo_diff=abs(self.board.ships[ship_id].halite - self.ship_cargo))
         else:
             self.attack_enemy_ship(abs(self.board.ships[ship_id].halite - self.ship_cargo))
 
     def attack_enemy_ship(self, diff):
         """ This function encourages attacking the enemy ship """
-        attack_encouragement = 10 * (diff + 1) / (self.closest_shipyard_distance + 0.1)
+        attack_encouragement = self.ATTACK_ENEMY_SHIP * (diff + 1) / (self.closest_shipyard_distance + 0.1)
         self.add_accordingly(attack_encouragement, title='Attacking-Enemy-Ship', loging=False)
         
         # If the enemy ship was one move away then update it so the other ships could see it 
@@ -224,11 +221,16 @@ class DecisionShip:
     def get_away(self, cargo_diff=0):
         """ This function is called when my ship needs to get away from a ship which might be following it """
         # 1. Directly discouraging the movement
-        if len(self.current['dir']) == 2:
+        if len(self.current['dir']) == 1:
+            self.eliminated_moves.append(self.current['dir'])
+            self.eliminated_moves.append('mine')
+            direction_discouragement = 0
+        elif len(self.current['dir']) == 2:
             # When the enemy ship is two moves away, there should be a strong discouragement
-            direction_discouragement = -150 * (self.ship.halite  + 10)
+            direction_discouragement = 3 * self.GET_AWAY * (self.ship.halite  + 10)
         else:
-            direction_discouragement = -50 * cargo_diff
+            direction_discouragement = self.GET_AWAY * cargo_diff
+        
         self.add_accordingly(direction_discouragement, title='Get-Away', loging=False)
 
         # 2. Encouraging going to the closest shipyard
@@ -238,9 +240,9 @@ class DecisionShip:
     def deposit(self):
         """ Weights the tendency to deposit and adds to the directions which lead to the given shipyard """
         if self.near_end():
-            deposit_tendency = self.ship_cargo * 800
+            deposit_tendency = 16 * self.DEPOSIT * self.ship_cargo
         else:
-            deposit_tendency = 50 * self.ship_cargo 
+            deposit_tendency = self.DEPOSIT * self.ship_cargo 
         self.add_accordingly(deposit_tendency, title='Deposit', loging=False)
 
     def attack_enemy_shipyard(self, shipyard_id):
@@ -301,6 +303,7 @@ class DecisionShip:
                 currentDir += "N" * abs(shipyard.position.y - self.current_position.y)
 
             if currentDir != "":
+                log("current direction: " + currentDir)
                 self.current['dir'] = currentDir
                 self.add_accordingly(value, title='  Yard-sur', loging=True)
 
@@ -412,7 +415,7 @@ class ShipyardDecisions:
 
             if cell.shipyard is not None:
                 if cell.shipyard.id in self.player.shipyard_ids:
-                    value += 200 / len(self.current['dir'])
+                    value += 200 / len(direction)
 
         return round(value, 2)
 
@@ -485,6 +488,17 @@ def grid(cell):
         'EEEEEENNN': e6.north.north.north, 'EEEEEESSS': e6.south.south.south, 'WWWWWWNNN': w6.north.north.north, 'WWWWWWSSS': w6.south.south.south,
         'NNNNNWWWW': n5.west.west.west.west, 'NNNNNEEEE': n5.east.east.east.east, 'SSSSSWWWW': s5.west.west.west.west, 'SSSSSEEEE':  s5.east.east.east.east,
         'EEEEENNNN': e5.north.north.north.north, 'EEEEESSSS': e5.south.south.south.south, 'WWWWWNNNN': w5.north.north.north.north, 'WWWWWSSSS': w5.south.south.south.south,
+        # 10 moves away
+        'SSSSSSSSS': s10, 'NNNNNNNNN': n10, 'WWWWWWWWW': w10, 'EEEEEEEEE': e10,
+        'WWWWWWWWWN': w9.north, 'WWWWWWWWWS': w9.south, 'EEEEEEEEEN': e9.north, 'EEEEEEEEES': e9.south,
+        'SSSSSSSSSE': s9.east, 'SSSSSSSSSW': s9.west, 'NNNNNNNNNW': n9.west, 'NNNNNNNNNE': n9.east,
+        'NNNNNNNNEE': n8.east.east, 'SSSSSSSSEE': s8.east.east, 'NNNNNNNNWW': n8.west.west, 'SSSSSSSSWW': s8.west.west,
+        'EEEEEEEENN': e8.north.north, 'EEEEEEEESS': e8.south.south, 'WWWWWWWWNN': w8.north.north, 'WWWWWWWWNN': w8.north.north,
+        'WWWWWWWNNN': w7.north.north, 'WWWWWWWSSS': w7.south.south, 'EEEEEEESSS': e7.south.south.south, 'EEEEEEEWWW': e7.north.north.north,
+        'NNNNNNNWWW': n7.west.west.west, 'NNNNNNNEEE': n7.east.east.east, 'SSSSSSSWWW': s7.west.west.west, 'SSSSSSSEEE': s7.east.east.east,
+        'WWWWWWNNNN': w6.north.north.north.north, 'WWWWWWSSSS': w6.south.south.south.south, 'EEEEEENNNN': e6.north.north.north.north, 'EEEEEESSSS': e6.south.south.south.south,
+        'NNNNNNWWWW': n6.west.west.west.west, 'NNNNNNEEEE': n6.east.east.east.east, 'SSSSSSWWWW': s6.west.west.west.west, 'SSSSSSEEEE': s6.east.east.east.east,
+        'NNNNNWWWWW': n5.west.west.west.west.west, 'NNNNNEEEEE': n5.east.east.east.east.east, 'SSSSSWWWWW': s5.west.west.west.west.west, 'SSSSSEEEEE': s5.east.east.east.east.east
     }
 
 
@@ -517,7 +531,7 @@ def agent(obs, config):
 
     # It would be absurd to log when I am out of the game
     if not(len(board.current_player.ships) == 0 and board.current_player.halite < 500):
-        log(str(step + 1) + '|-----------------------------------------------------------------------')
+        log(str(step) + '|-----------------------------------------------------------------------')
 
     for ship_id in ships:
         if ship_id in board.current_player.ship_ids:
