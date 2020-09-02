@@ -23,7 +23,7 @@ class DecisionShip:
         self.ship_cargo = self.ship.halite
         self.current_cell = self.ship.cell
         self.current_position = self.ship.position
-        
+        # Check to see if the stimulation is about to end
         self.NEAR_END = self.near_end()
         # All moves ship can take
         self.moves = {"N": ShipAction.NORTH, 'S': ShipAction.SOUTH, 'W': ShipAction.WEST,
@@ -314,20 +314,11 @@ class DecisionShip:
         """ Returns the closest shipyard's id """
         closest_id, diff = 0.99, 0.99
         for shipyard in self.player.shipyards:
-            distance = self.measure_distance(shipyard.cell)
+            distance = measure_distance(self.current_cell.position, shipyard.cell.position)
             if diff > distance or diff == 0.99:
                 closest_id, diff = shipyard.id, distance
         return closest_id, diff
-    
-    def measure_distance(self, dest):
-        """ Measures the distance between two points """
-        x_1 = abs(self.current_cell.position.x - dest.position.x)
-        x_2 = abs(21 - self.current_cell.position.x + dest.position.x)
-        y_1 = abs(self.current_cell.position.y - dest.position.y)
-        y_2 = abs(21 - self.current_cell.position.y + dest.position.y)
-
-        return min((x_1 + y_1), (x_1 + y_2), (x_2 + y_1), (x_2 + y_2))
-    
+        
     def near_end(self):
         """ Determines if the game is about to end so the ships with halite can convert to shipyard and maximum the halite we will end up with """
         count = 0
@@ -335,8 +326,9 @@ class DecisionShip:
         for opp in self.board.opponents:
             if opp.halite < 500 and len(opp.ships) == 0 and self.player.halite > opp.halite: count += 1
             if opp.halite > 2000 and len(opp.ships) > 1: count -= 1
+
         # If count was more than 2 return True
-        return count >= 2
+        return (count >= 2 or self.step > 390)
 
     def apply_elimination(self):
         """ Eliminates the moves to be eliminated. """
@@ -345,7 +337,7 @@ class DecisionShip:
                 del self.weights[move]
 
     def round(self):
-        """ This functions rounds the  weights so they can be easily printed """
+        """ This functions rounds the weights so they can be easily printed """
         self.weights['mine'] = round(self.weights['mine'], 1)
         self.weights['N'] = round(self.weights['N'], 1)
         self.weights['S'] = round(self.weights['S'], 1)
