@@ -49,14 +49,12 @@ class DecisionShip:
         self.DEPOSIT = self.deposit_hyper()
         self.DIRECTION_ENCOURAGEMENT = self.direction_encouragement_hyper()
         self.ATTACK_ENEMY_SHIP = self.attack_enemy_ship_hyper()
-        
-        self.DISTRIBUTION = -1500 + (self.step // 200) * 50 
-        self.GET_AWAY = -500 + (self.step // 100) * 20
-        self.CLOSEST_SHIPYARD = 500 + (self.step // 60) * 100
+        self.DISTRIBUTION = self.distribution_hyper()
+        self.GET_AWAY = self.get_away_hyper()
+        self.CLOSEST_SHIPYARD = self.closest_shipyard_hyper()
         self.CONVERSION = 60 - (self.step // 200) * 10
-        # This one should be determined seperately
-        self.CARGO_THRESHHOLD = 600
 
+        log('  mining: ' + str(self.MINING) + ", depo: " + str(self.DEPOSIT) + ", dir_enc:" + str(round(self.DIRECTION_ENCOURAGEMENT,2)) + ", att-en-ship:" + str(round(self.ATTACK_ENEMY_SHIP,1)) + ", distro: " + str(round(self.DISTRIBUTION,1)) + ', get-away: ' + str(round(self.GET_AWAY,1)) + ', c_yard:' + str(self.CLOSEST_SHIPYARD))
     def mining_hyper(self):
         """ Calculates the hyperparameters value for MINING, indirect with ship's cargo """
         return 100 + (self.step // 25) * 10
@@ -65,14 +63,14 @@ class DecisionShip:
         """ Calculates the hyperparameters value for DEPOSIT, indirect with ship's cargo and step """
         dir_cargo = self.ship_cargo // 150
         dir_step = (self.step + 10) // 100
-        return 25 + 200 * dir_cargo * dir_step / self.closest_shipyard_distance + int(self.NEAR_END) * 5000
+        return 25 + 200 * dir_cargo * dir_step / (self.closest_shipyard_distance + 1) + int(self.NEAR_END) * 5000
 
     def direction_encouragement_hyper(self):
         """ Calculates the hyperparameters value for DIRECTION_ENCOURAGEMENT, indirect with ship's cargo and direction with step """
-        indir_cargo = self.ship_cargo // 500 + 1
+        indir_cargo = self.ship_cargo // 250 + 1
         dir_step = (400 - self.step) / 100
 
-        return 75 * dir_step / indir_cargo
+        return 10 * dir_step / indir_cargo
 
     def get_away_hyper(self):
         """ Calculates the hyperparameters value for DIRECTION_ENCOURAGEMENT, direct with cargo and indirect with number of ships """
@@ -86,6 +84,14 @@ class DecisionShip:
         indir_step = (self.step // 50) + 1
 
         return 1000 / (indir_cargo * indir_step)
+
+    def distribution_hyper(self):
+        """ Calculates the hyperparameters value for DISTRIBUTION, indirect with cargo and step """
+        return -100 / ((self.step // 20 + 1) * (self.ship_cargo // 100 + 1))
+
+    def closest_shipyard_hyper(self):
+        """ Calculates the hyperparameters value for CLOSEST_SHIPYARD, direct with cargo and step """
+        return 10 * (self.step // 50 + 1) * (self.ship_cargo)
 
     def determine(self):
         """ Returns next action decided for the ship based on the observations that have been made. """
@@ -332,9 +338,9 @@ class DecisionShip:
                 currentDir += "N" * abs(shipyard.position.y - self.current_position.y)
 
             if currentDir != "":
-                log("current direction: " + currentDir)
+                # log("?current direction: " + currentDir)
                 self.current['dir'] = currentDir
-                self.add_accordingly(value, title='  Yard-sur', loging=True)
+                self.add_accordingly(value, title='  Yard-sur', loging=False)
 
     def closest_shipyard(self):
         """ Returns the closest shipyard's id """
