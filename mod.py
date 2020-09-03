@@ -45,21 +45,47 @@ class DecisionShip:
 
     def set_hyperparameters(self):
         """ Initializes the hyperparameters that will affect the decision process """
-        self.MINING = 700 + (self.step // 50) * 80
+        self.MINING = self.mining_hyper()
+        self.DEPOSIT = self.deposit_hyper()
+        self.DIRECTION_ENCOURAGEMENT = self.direction_encouragement_hyper()
+        self.ATTACK_ENEMY_SHIP = self.attack_enemy_ship_hyper()
         
-        if self.NEAR_END or self.step > 385:
-            self.DEPOSIT = 1e5
-        else:
-            self.DEPOSIT = 800 + (self.step // 300) * 300 + self.step // 380 * 800
-
-        self.ATTACK_ENEMY_SHIP = 600 - (self.step // 75) * 100
-        self.DIRECTION_ENCOURAGEMENT = 200 - (self.step // 80) * 40 
         self.DISTRIBUTION = -1500 + (self.step // 200) * 50 
         self.GET_AWAY = -500 + (self.step // 100) * 20
         self.CLOSEST_SHIPYARD = 500 + (self.step // 60) * 100
         self.CONVERSION = 60 - (self.step // 200) * 10
         # This one should be determined seperately
         self.CARGO_THRESHHOLD = 600
+
+    def mining_hyper(self):
+        """ Calculates the hyperparameters value for MINING, indirect with ship's cargo """
+        return 100 + (self.step // 25) * 10
+
+    def deposit_hyper(self):
+        """ Calculates the hyperparameters value for DEPOSIT, indirect with ship's cargo and step """
+        dir_cargo = self.ship_cargo // 150
+        dir_step = (self.step + 10) // 100
+        return 25 + 200 * dir_cargo * dir_step / self.closest_shipyard_distance + int(self.NEAR_END) * 5000
+
+    def direction_encouragement_hyper(self):
+        """ Calculates the hyperparameters value for DIRECTION_ENCOURAGEMENT, indirect with ship's cargo and direction with step """
+        indir_cargo = self.ship_cargo // 500 + 1
+        dir_step = (400 - self.step) / 100
+
+        return 75 * dir_step / indir_cargo
+
+    def get_away_hyper(self):
+        """ Calculates the hyperparameters value for DIRECTION_ENCOURAGEMENT, direct with cargo and indirect with number of ships """
+        indir_ships_count = len(self.player.ships) + 1 
+        dir_cargo = (self.ship_cargo + 1) * 10
+        return -1 * dir_cargo / indir_ships_count
+
+    def attack_enemy_ship_hyper(self):
+        """ Calculates the hyperparameters value for ATTACK_ENEMY_SHIP, indirect with cargo and step """
+        indir_cargo = (self.ship_cargo // 100) + 1
+        indir_step = (self.step // 50) + 1
+
+        return 1000 / (indir_cargo * indir_step)
 
     def determine(self):
         """ Returns next action decided for the ship based on the observations that have been made. """
@@ -232,7 +258,7 @@ class DecisionShip:
             direction_discouragement = 0
         elif len(self.current['dir']) == 2:
             # When the enemy ship is two moves away, there should be a strong discouragement
-            direction_discouragement = 5 * self.GET_AWAY * (self.ship.halite  + 10)
+            direction_discouragement = 10 * self.GET_AWAY * (self.ship.halite  + 10)
         else:
             direction_discouragement = self.GET_AWAY * cargo_diff
         
@@ -328,7 +354,7 @@ class DecisionShip:
             if opp.halite > 2000 and len(opp.ships) > 1: count -= 1
 
         # If count was more than 2 return True
-        return (count >= 2 or self.step > 390)
+        return (count >= 2 or self.step > 385)
 
     def apply_elimination(self):
         """ Eliminates the moves to be eliminated. """
