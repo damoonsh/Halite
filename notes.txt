@@ -24,12 +24,14 @@ They are different aspect to this agent:
 
 Note: No need to add the other cell with more than 6 moves for now, let's work on weights then add them
 
+current workflow: 
+   log all the values and try to figure out why the fuck there is a problem
+
 # Implement: 
     - Add all the new stuff then start playing around with them
     - Keep the additions simple for now without exponents
     - Go through all the shipyards and add/subtract given there is an enemy or my  own ships
     - Increase tendency to deposit as the steps increase
-
 
 # Fixes: 
     - Should not convert where it has a lot of halite
@@ -69,3 +71,9 @@ Note: No need to add the other cell with more than 6 moves for now, let's work o
    -follow ships within the 10 moves radius fiercefully
    - do a comparison with other players to better weight the moves
    - don't spawn a ship when the game is almost done
+   - bring down the likelihood of conversion based on the distance to the closest shipyard
+   - instead making ships based on step should make it based on the average number of opponent ships
+   - In the agent function add a utility that decides which ship is the best one for conversion
+     when they are no ships available
+   - wrtie a module to extract info on opponents in order to consider it within the intialization of hyperparameters
+   - modify go_to_closest_shipyard ********
