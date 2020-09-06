@@ -2,7 +2,7 @@
 
 ## Overview
 
-Halite competition is a deep reinforcement learning competition where the agent should make decisions with the given environment. They are various possible situations where the agent will be in and should respond in a way that suits its environment. They are some factors within the environment that one should take into account.
+Halite competition is a Deep Reinforcement learning competition where the agent should make decisions with the given environment. They are various possible situations where the agent will exposed to and should respond so that it maximizes its long-term benefit. They are some factors within the environment that one should take into account such as the ship's cargo, player's halite, cell's halite and etc.
 
 ## Agent's Decision process
 
