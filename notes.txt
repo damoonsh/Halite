@@ -75,5 +75,6 @@ current workflow:
    - instead making ships based on step should make it based on the average number of opponent ships
    - In the agent function add a utility that decides which ship is the best one for conversion
      when they are no ships available
-   - wrtie a module to extract info on opponents in order to consider it within the intialization of hyperparameters
+   - write a module to extract info on opponents in order to consider it within the initialization of hyperparameters
    - modify go_to_closest_shipyard ********
+   - self.weights['mine'] += self.MINING * self.current_cell.halite ** 2: divide by 16
