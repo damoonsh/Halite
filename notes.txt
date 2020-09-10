@@ -34,7 +34,7 @@ current workflow:
     - Increase tendency to deposit as the steps increase
 
 # Fixes: 
-    - Should not convert where it has a lot of halite
+   - **** At the beginning, move all the enemy ships to prevent any kind of collisions with my ships
     - The decision to attack an enemy shipyard is dependent on how close it is to my shipyard
     - avoid_collision should focus on distributing the ships
     - Weightings for shipyard status don't work well
@@ -78,3 +78,4 @@ current workflow:
    - write a module to extract info on opponents in order to consider it within the initialization of hyperparameters
    - modify go_to_closest_shipyard ********
    - self.weights['mine'] += self.MINING * self.current_cell.halite ** 2: divide by 16
+   - When there is one of my own ships, add to the convert, otherwise subtract
